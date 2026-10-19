@@ -59,286 +59,16 @@ interface VendorMapProfile {
   employees: EmployeeUnderVendor[];
 }
 
-// Default demonstration vendors across key Telangana / Hyderabad hubs
-const DEMO_VENDORS: VendorMapProfile[] = [
-  {
-    id: 'V-101',
-    companyName: 'Apex Cooling & HVAC Systems',
-    ownerName: 'Rajesh Sharma',
-    phone: '+91 98450 11221',
-    email: 'rajesh.apex@servfex.com',
-    location: 'Hitech City, Madhapur, Hyderabad',
-    lat: 17.4435,
-    lng: 78.3772,
-    category: 'HVAC & Air Conditioning',
-    kycStatus: 'APPROVED',
-    rating: 4.9,
-    reviewCount: 142,
-    commissionRate: 15,
-    todayRevenue: 16800,
-    todayJobsCount: 8,
-    lifetimeRevenue: 420000,
-    warehouseHub: 'Central Logistics Hub (Gachibowli)',
-    employees: [
-      {
-        id: 'E-1',
-        name: 'Suresh Kumar',
-        phone: '+91 98765 01011',
-        specialization: 'Split AC Specialist',
-        status: 'On Job',
-        todayJobs: 3,
-        todayRevenue: 6400,
-        rating: 4.9,
-      },
-      {
-        id: 'E-2',
-        name: 'Imran Ali',
-        phone: '+91 98765 01012',
-        specialization: 'Jet-Pump Deep Cleaning',
-        status: 'Available',
-        todayJobs: 3,
-        todayRevenue: 5900,
-        rating: 4.8,
-      },
-      {
-        id: 'E-3',
-        name: 'Praveen Goud',
-        phone: '+91 98765 01013',
-        specialization: 'PCB Repair & Gas Charging',
-        status: 'Available',
-        todayJobs: 2,
-        todayRevenue: 4500,
-        rating: 5.0,
-      },
-    ],
-  },
-  {
-    id: 'V-102',
-    companyName: 'Telangana Power & Electricals',
-    ownerName: 'Venkatesh Rao',
-    phone: '+91 98490 22334',
-    email: 'venkat.power@servfex.com',
-    location: 'Kukatpally Housing Board (KPHB), Hyderabad',
-    lat: 17.4938,
-    lng: 78.3995,
-    category: 'Electrical & Power Systems',
-    kycStatus: 'APPROVED',
-    rating: 4.8,
-    reviewCount: 98,
-    commissionRate: 15,
-    todayRevenue: 12450,
-    todayJobsCount: 6,
-    lifetimeRevenue: 310000,
-    warehouseHub: 'Central Logistics Hub (Gachibowli)',
-    employees: [
-      {
-        id: 'E-4',
-        name: 'Karthik Reddy',
-        phone: '+91 98765 02021',
-        specialization: 'High-Voltage Wiring & MCB',
-        status: 'On Job',
-        todayJobs: 3,
-        todayRevenue: 6200,
-        rating: 4.9,
-      },
-      {
-        id: 'E-5',
-        name: 'Deepak Naik',
-        phone: '+91 98765 02022',
-        specialization: 'Inverter & Generator Setup',
-        status: 'Available',
-        todayJobs: 3,
-        todayRevenue: 6250,
-        rating: 4.7,
-      },
-    ],
-  },
-  {
-    id: 'V-103',
-    companyName: 'AquaFlow Plumbing & Sanitation',
-    ownerName: 'Syed Moizuddin',
-    phone: '+91 98220 33445',
-    email: 'aquaflow@servfex.com',
-    location: 'Banjara Hills, Road No. 12, Hyderabad',
-    lat: 17.4156,
-    lng: 78.435,
-    category: 'Plumbing & Drainage',
-    kycStatus: 'APPROVED',
-    rating: 4.9,
-    reviewCount: 176,
-    commissionRate: 15,
-    todayRevenue: 14200,
-    todayJobsCount: 7,
-    lifetimeRevenue: 385000,
-    warehouseHub: 'Central Logistics Hub (Gachibowli)',
-    employees: [
-      {
-        id: 'E-6',
-        name: 'Vijay Verma',
-        phone: '+91 98765 03031',
-        specialization: 'Clogged Drain & Pipe Jetting',
-        status: 'Available',
-        todayJobs: 3,
-        todayRevenue: 5800,
-        rating: 4.9,
-      },
-      {
-        id: 'E-7',
-        name: 'Santosh Kumar',
-        phone: '+91 98765 03032',
-        specialization: 'Bathroom Sanitary Fitting',
-        status: 'On Job',
-        todayJobs: 2,
-        todayRevenue: 4400,
-        rating: 4.8,
-      },
-      {
-        id: 'E-8',
-        name: 'Mohammed Rizwan',
-        phone: '+91 98765 03033',
-        specialization: 'Water Tank & Booster Pumps',
-        status: 'Off-Duty',
-        todayJobs: 2,
-        todayRevenue: 4000,
-        rating: 5.0,
-      },
-    ],
-  },
-  {
-    id: 'V-104',
-    companyName: 'Deccan Home Cleaners & Hygiene',
-    ownerName: 'Manohar Reddy',
-    phone: '+91 97001 44556',
-    email: 'deccan.clean@servfex.com',
-    location: 'Gachibowli Financial District, Hyderabad',
-    lat: 17.4399,
-    lng: 78.3489,
-    category: 'Home Deep Cleaning',
-    kycStatus: 'APPROVED',
-    rating: 4.7,
-    reviewCount: 84,
-    commissionRate: 15,
-    todayRevenue: 18500,
-    todayJobsCount: 5,
-    lifetimeRevenue: 290000,
-    warehouseHub: 'Central Logistics Hub (Gachibowli)',
-    employees: [
-      {
-        id: 'E-9',
-        name: 'Ravi Teja',
-        phone: '+91 98765 04041',
-        specialization: 'Kitchen Deep Steam Cleaning',
-        status: 'On Job',
-        todayJobs: 2,
-        todayRevenue: 8500,
-        rating: 4.8,
-      },
-      {
-        id: 'E-10',
-        name: 'Gopal Krishna',
-        phone: '+91 98765 04042',
-        specialization: 'Sofa & Carpet Shampooing',
-        status: 'Available',
-        todayJobs: 3,
-        todayRevenue: 10000,
-        rating: 4.7,
-      },
-    ],
-  },
-  {
-    id: 'V-105',
-    companyName: 'Secunderabad Appliance Care',
-    ownerName: 'Naresh Goud',
-    phone: '+91 98112 55667',
-    email: 'naresh.appliances@servfex.com',
-    location: 'Paradise, Secunderabad, Telangana',
-    lat: 17.4395,
-    lng: 78.4983,
-    category: 'Appliances & Refrigeration',
-    kycStatus: 'APPROVED',
-    rating: 4.8,
-    reviewCount: 112,
-    commissionRate: 15,
-    todayRevenue: 9800,
-    todayJobsCount: 5,
-    lifetimeRevenue: 265000,
-    warehouseHub: 'Central Logistics Hub (Gachibowli)',
-    employees: [
-      {
-        id: 'E-11',
-        name: 'Mahesh Babu',
-        phone: '+91 98765 05051',
-        specialization: 'Washing Machine Specialist',
-        status: 'Available',
-        todayJobs: 3,
-        todayRevenue: 5800,
-        rating: 4.8,
-      },
-      {
-        id: 'E-12',
-        name: 'Arjun Das',
-        phone: '+91 98765 05052',
-        specialization: 'Refrigerator Inverter Tech',
-        status: 'Available',
-        todayJobs: 2,
-        todayRevenue: 4000,
-        rating: 4.7,
-      },
-    ],
-  },
-  {
-    id: 'V-106',
-    companyName: 'PureAqua RO Solutions',
-    ownerName: 'Vikas Agarwal',
-    phone: '+91 99881 66778',
-    email: 'pureaqua@servfex.com',
-    location: 'Begumpet, Hyderabad',
-    lat: 17.4448,
-    lng: 78.4682,
-    category: 'Water Purification',
-    kycStatus: 'APPROVED',
-    rating: 4.9,
-    reviewCount: 65,
-    commissionRate: 15,
-    todayRevenue: 8200,
-    todayJobsCount: 4,
-    lifetimeRevenue: 180000,
-    warehouseHub: 'Central Logistics Hub (Gachibowli)',
-    employees: [
-      {
-        id: 'E-13',
-        name: 'Sanjay Patro',
-        phone: '+91 98765 06061',
-        specialization: 'RO Membrane & TDS Tuning',
-        status: 'On Job',
-        todayJobs: 2,
-        todayRevenue: 4200,
-        rating: 4.9,
-      },
-      {
-        id: 'E-14',
-        name: 'Bikram Sen',
-        phone: '+91 98765 06062',
-        specialization: 'UV/UF Filter Replacements',
-        status: 'Available',
-        todayJobs: 2,
-        todayRevenue: 4000,
-        rating: 4.9,
-      },
-    ],
-  },
-];
-
 export const Warehouse: React.FC = () => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<{ [key: string]: google.maps.Marker }>({});
 
-  const [selectedVendor, setSelectedVendor] = useState<VendorMapProfile | null>(DEMO_VENDORS[0]);
+  const [selectedVendor, setSelectedVendor] = useState<VendorMapProfile | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
 
-  // Load API vendors to merge if available
+  // Load API vendors from backend
   const { data: apiVendors } = useQuery({
     queryKey: ['warehouse-map-vendors'],
     queryFn: async () => {
@@ -351,36 +81,67 @@ export const Warehouse: React.FC = () => {
     },
   });
 
-  // Merge API vendors with mock locations if needed
-  const [vendorsList, setVendorsList] = useState<VendorMapProfile[]>(DEMO_VENDORS);
+  const [vendorsList, setVendorsList] = useState<VendorMapProfile[]>([]);
 
   useEffect(() => {
-    if (apiVendors && Array.isArray(apiVendors) && apiVendors.length > 0) {
-      // Map API vendors to map format, using coords if present or assigning coordinates in Hyderabad
-      const mapped: VendorMapProfile[] = apiVendors.map((v: any, idx: number) => {
-        const fallback = DEMO_VENDORS[idx % DEMO_VENDORS.length];
+    if (apiVendors && Array.isArray(apiVendors)) {
+      const mapped: VendorMapProfile[] = apiVendors.map((v: any) => {
+        const employees: EmployeeUnderVendor[] = Array.isArray(v.employees)
+          ? v.employees.map((e: any) => ({
+              id: e.id,
+              name: e.user?.name || 'Technician',
+              phone: e.user?.phone || e.phone || 'N/A',
+              specialization:
+                e.specialization ||
+                (Array.isArray(e.skills) && e.skills.length > 0 ? e.skills.join(', ') : 'General Technician'),
+              status: e.isAvailable ? 'Available' : 'On Job',
+              todayJobs: e.completedJobs || 0,
+              todayRevenue: 0,
+              rating: typeof e.rating === 'number' ? e.rating : 5.0,
+            }))
+          : [];
+
+        const locationStr =
+          v.warehouseLocation ||
+          v.location ||
+          [v.address, v.city, v.state, v.pincode].filter(Boolean).join(', ') ||
+          'Hyderabad, Telangana';
+
+        const categoryStr =
+          Array.isArray(v.vendorServices) && v.vendorServices.length > 0
+            ? v.vendorServices.map((vs: any) => vs.service?.name).filter(Boolean).join(', ')
+            : Array.isArray(v.categories) && v.categories.length > 0
+            ? v.categories.map((c: any) => c.category?.name || c.name).filter(Boolean).join(', ')
+            : 'General Services';
+
         return {
           id: v.id,
-          companyName: v.companyName,
-          ownerName: v.user?.name || fallback.ownerName,
-          phone: v.user?.phone || fallback.phone,
-          email: v.user?.email || fallback.email,
-          location: v.location || fallback.location,
-          lat: v.latitude || fallback.lat + (idx * 0.008),
-          lng: v.longitude || fallback.lng + (idx * 0.008),
-          category: fallback.category,
-          kycStatus: v.kycStatus || 'APPROVED',
-          rating: v.rating || fallback.rating,
-          reviewCount: v.reviewCount || fallback.reviewCount,
+          companyName: v.companyName || v.warehouseName || 'Registered Partner',
+          ownerName: v.user?.name || 'Partner Owner',
+          phone: v.warehousePhone || v.user?.phone || 'N/A',
+          email: v.user?.email || 'N/A',
+          location: locationStr,
+          lat: typeof v.latitude === 'number' && !isNaN(v.latitude) ? v.latitude : 17.4435,
+          lng: typeof v.longitude === 'number' && !isNaN(v.longitude) ? v.longitude : 78.3772,
+          category: categoryStr,
+          kycStatus: v.kycStatus || 'PENDING',
+          rating: typeof v.rating === 'number' ? v.rating : 5.0,
+          reviewCount: v.reviewCount || 0,
           commissionRate: Number(v.commissionRate) || 15,
-          todayRevenue: fallback.todayRevenue + (idx * 1200),
-          todayJobsCount: fallback.todayJobsCount + (idx % 3),
-          lifetimeRevenue: fallback.lifetimeRevenue,
-          warehouseHub: fallback.warehouseHub,
-          employees: fallback.employees,
+          todayRevenue: 0,
+          todayJobsCount: 0,
+          lifetimeRevenue: 0,
+          warehouseHub: v.warehouseName || (v.city ? `${v.city} Depot` : 'Central Logistics Hub'),
+          employees,
         };
       });
       setVendorsList(mapped);
+      if (mapped.length > 0 && !selectedVendor) {
+        setSelectedVendor(mapped[0]);
+      }
+    } else {
+      setVendorsList([]);
+      setSelectedVendor(null);
     }
   }, [apiVendors]);
 
@@ -496,6 +257,19 @@ export const Warehouse: React.FC = () => {
       {/* Interactive Map Canvas (Full Page) */}
       <div className="flex-1 relative w-full h-full">
         <div ref={mapContainerRef} className="w-full h-full z-0" />
+
+        {/* Empty State Overlay when no vendors are registered */}
+        {filteredVendors.length === 0 && (
+          <div className="absolute inset-x-4 top-36 max-w-md mx-auto z-[900] pointer-events-auto bg-white/95 backdrop-blur-md p-6 rounded-2xl shadow-xl border border-slate-200 text-center space-y-2">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 mx-auto flex items-center justify-center">
+              <Boxes className="w-6 h-6" />
+            </div>
+            <h3 className="font-extrabold text-slate-900 text-sm">No Active Partner Depots Found</h3>
+            <p className="text-xs text-slate-500">
+              There are currently no partner vendors registered or matching your filter. Once partners are approved and active, their depots and technicians will appear here in real time.
+            </p>
+          </div>
+        )}
 
         {/* Floating Top Header & Search Bar Overlay */}
         <div className="absolute top-4 left-4 right-4 lg:right-[480px] z-[1000] pointer-events-none flex flex-col gap-2">
@@ -710,7 +484,13 @@ export const Warehouse: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                {selectedVendor.employees.map((emp) => (
+                {selectedVendor.employees.length === 0 ? (
+                  <div className="p-6 rounded-xl border border-dashed border-slate-200 bg-slate-50 text-center space-y-1">
+                    <p className="text-xs font-bold text-slate-700">No Technicians Registered</p>
+                    <p className="text-[11px] text-slate-400">This vendor has not onboarded any field technicians yet.</p>
+                  </div>
+                ) : (
+                  selectedVendor.employees.map((emp) => (
                   <div
                     key={emp.id}
                     className="p-3.5 rounded-xl border border-slate-200 bg-white shadow-2xs hover:border-slate-300 transition space-y-2"
@@ -776,7 +556,8 @@ export const Warehouse: React.FC = () => {
                       </span>
                     </div>
                   </div>
-                ))}
+                ))
+                )}
               </div>
             </div>
 
