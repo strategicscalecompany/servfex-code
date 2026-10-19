@@ -93,11 +93,13 @@ export const Dashboard: React.FC = () => {
   const warehouseWeight = activeWarehouseObj.weight;
 
   // Base gross revenue calculation taking into account timeframe & selected warehouse
-  const baseMultiplier = timeRange === 'TODAY' ? 1 : timeRange === 'WEEK' ? 3.5 : 8.2;
-  const rawTotal = Math.max(stats.revenue.totalRevenue, 4595);
-  const currentGross = Math.round(
-    rawTotal * (timeRange === 'TODAY' ? 0.35 : baseMultiplier / 4) * warehouseWeight
-  );
+  const rawTotal =
+    timeRange === 'TODAY'
+      ? stats.revenue.todayRevenue
+      : timeRange === 'MONTH'
+      ? stats.revenue.monthlyRevenue
+      : stats.revenue.totalRevenue;
+  const currentGross = Math.round((rawTotal || 0) * warehouseWeight);
 
   // ServFex standard revenue split:
   // Admin Commission: 18%
@@ -115,128 +117,49 @@ export const Dashboard: React.FC = () => {
   const circleRadius = 54;
   const circleCircumference = 2 * Math.PI * circleRadius; // ~339.29
 
-  const adminStroke = (circleCircumference * adminPercentage) / 100;
-  const partnerStroke = (circleCircumference * partnerPercentage) / 100;
-  const employeesStroke = (circleCircumference * employeesPercentage) / 100;
+  const adminStroke = currentGross > 0 ? (circleCircumference * adminPercentage) / 100 : 0;
+  const partnerStroke = currentGross > 0 ? (circleCircumference * partnerPercentage) / 100 : 0;
+  const employeesStroke = currentGross > 0 ? (circleCircumference * employeesPercentage) / 100 : 0;
 
   const adminOffset = 0;
   const partnerOffset = -adminStroke;
   const employeesOffset = -(adminStroke + partnerStroke);
 
-  // Scaled weekly bar graph data based on warehouse selection
-  const rawWeeklyTrend = [
-    { day: 'Mon', admin: 210, partner: 630, employees: 320, total: 1160 },
-    { day: 'Tue', admin: 280, partner: 840, employees: 430, total: 1550 },
-    { day: 'Wed', admin: 340, partner: 1020, employees: 530, total: 1890 },
-    { day: 'Thu', admin: 310, partner: 930, employees: 480, total: 1720 },
-    { day: 'Fri', admin: 420, partner: 1260, employees: 650, total: 2330 },
-    { day: 'Sat', admin: 580, partner: 1740, employees: 900, total: 3220 },
-    { day: 'Sun', admin: 650, partner: 1950, employees: 1010, total: 3610 },
-  ];
+  // Scaled weekly bar graph data based on warehouse selection and real gross volume
+  const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const weeklyTrendData = daysOfWeek.map((day) => {
+    const dayTotal = currentGross > 0 ? Math.round((currentGross / 7) * warehouseWeight) : 0;
+    return {
+      day,
+      admin: Math.round((dayTotal * adminPercentage) / 100),
+      partner: Math.round((dayTotal * partnerPercentage) / 100),
+      employees: Math.round((dayTotal * employeesPercentage) / 100),
+      total: dayTotal,
+    };
+  });
 
-  const weeklyTrendData = rawWeeklyTrend.map((d) => ({
-    day: d.day,
-    admin: Math.round(d.admin * warehouseWeight),
-    partner: Math.round(d.partner * warehouseWeight),
-    employees: Math.round(d.employees * warehouseWeight),
-    total: Math.round(d.total * warehouseWeight),
-  }));
-
-  const maxDailyTotal = Math.max(...weeklyTrendData.map((d) => d.total));
+  const maxDailyTotal = Math.max(...weeklyTrendData.map((d) => d.total), 1);
 
   // Vendor revenue table items (API merged with calculated income share and warehouse hubs)
   const masterVendorList: VendorRevenueRow[] = (
-    vendorsData && vendorsData.length > 0
+    vendorsData && Array.isArray(vendorsData) && vendorsData.length > 0
       ? vendorsData.map((v: any, idx: number) => {
-          const assignedHub = WAREHOUSE_OPTIONS[(idx % (WAREHOUSE_OPTIONS.length - 1)) + 1].id;
-          const vGross = Math.round((currentGross / (vendorsData.length || 1)) * (1 + (idx % 3) * 0.2));
+          const assignedHub = v.warehouseLocation || v.warehouseName || WAREHOUSE_OPTIONS[(idx % (WAREHOUSE_OPTIONS.length - 1)) + 1].id;
+          const vGross = Number(v.lifetimeRevenue || v.todayRevenue || 0);
           return {
             id: v.id,
             companyName: v.companyName,
-            category: v.companyName.includes('Cool') || v.companyName.includes('AC') ? 'HVAC & AC' : 'Cleaning & Multi-Trade',
+            category: v.category || (v.companyName.includes('Cool') || v.companyName.includes('AC') ? 'HVAC & AC' : 'General Services'),
             warehouseHub: assignedHub,
-            employeesCount: v.employees?.length || (idx % 4) + 2,
-            completedJobs: Math.round(vGross / 650),
+            employeesCount: Array.isArray(v.employees) ? v.employees.length : 0,
+            completedJobs: v.completedJobsCount || v.completedJobs || 0,
             grossRevenue: vGross,
             adminShare: Math.round((vGross * adminPercentage) / 100),
             partnerShare: Math.round((vGross * partnerPercentage) / 100),
             employeesShare: Math.round((vGross * employeesPercentage) / 100),
           };
         })
-      : [
-          {
-            id: 'V-1',
-            companyName: 'Apex Cooling & HVAC Systems',
-            category: 'HVAC & Air Conditioning',
-            warehouseHub: 'Central Logistics Hub (Hyderabad)',
-            employeesCount: 5,
-            completedJobs: 14,
-            grossRevenue: Math.round(9800 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-            adminShare: Math.round(1764 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-            partnerShare: Math.round(5292 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-            employeesShare: Math.round(2744 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-          },
-          {
-            id: 'V-2',
-            companyName: 'Telangana Power & Electricals',
-            category: 'Electrical & Power Systems',
-            warehouseHub: 'Central Logistics Hub (Hyderabad)',
-            employeesCount: 4,
-            completedJobs: 11,
-            grossRevenue: Math.round(7450 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-            adminShare: Math.round(1341 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-            partnerShare: Math.round(4023 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-            employeesShare: Math.round(2086 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-          },
-          {
-            id: 'V-3',
-            companyName: 'AquaFlow Plumbing & Sanitation',
-            category: 'Plumbing & Drainage',
-            warehouseHub: 'West Fulfillment Depot (Mumbai)',
-            employeesCount: 3,
-            completedJobs: 9,
-            grossRevenue: Math.round(5900 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-            adminShare: Math.round(1062 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-            partnerShare: Math.round(3186 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-            employeesShare: Math.round(1652 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-          },
-          {
-            id: 'V-4',
-            companyName: 'Deccan Home Cleaners',
-            category: 'Deep Cleaning & Sanitization',
-            warehouseHub: 'South Operations Depot (Bengaluru)',
-            employeesCount: 6,
-            completedJobs: 12,
-            grossRevenue: Math.round(8600 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-            adminShare: Math.round(1548 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-            partnerShare: Math.round(4644 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-            employeesShare: Math.round(2408 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-          },
-          {
-            id: 'V-5',
-            companyName: 'Secunderabad Appliance Care',
-            category: 'Appliances & Refrigeration',
-            warehouseHub: 'Central Logistics Hub (Hyderabad)',
-            employeesCount: 4,
-            completedJobs: 8,
-            grossRevenue: Math.round(6200 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-            adminShare: Math.round(1116 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-            partnerShare: Math.round(3348 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-            employeesShare: Math.round(1736 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-          },
-          {
-            id: 'V-6',
-            companyName: 'PureAqua RO Solutions',
-            category: 'Water Purification',
-            warehouseHub: 'North Logistics Depot (Delhi NCR)',
-            employeesCount: 3,
-            completedJobs: 7,
-            grossRevenue: Math.round(5100 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-            adminShare: Math.round(918 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-            partnerShare: Math.round(2754 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-            employeesShare: Math.round(1428 * (selectedWarehouse === 'ALL' ? 1 : warehouseWeight * 2.2)),
-          },
-        ]
+      : []
   );
 
   // Filter vendors by selected warehouse
@@ -516,7 +439,14 @@ export const Dashboard: React.FC = () => {
 
             {/* SVG Grouped / Stacked Bar Graph */}
             <div className="h-56 relative pt-4 flex items-end justify-between gap-2 sm:gap-4 px-2 border-b border-slate-100">
-              {weeklyTrendData.map((dataItem, index) => {
+              {currentGross === 0 ? (
+                <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 text-xs">
+                  <BarChart3 className="w-10 h-10 text-slate-300 mb-2 stroke-1" />
+                  <span className="font-bold text-slate-600">No Revenue Volume Recorded Yet</span>
+                  <span className="text-[11px] text-slate-400 mt-0.5">Transactions will appear as customer bookings are completed.</span>
+                </div>
+              ) : (
+                weeklyTrendData.map((dataItem, index) => {
                 const heightPercent = Math.min(100, Math.round((dataItem.total / (maxDailyTotal || 1)) * 100));
                 const adminHeight = Math.round(heightPercent * (adminPercentage / 100));
                 const partnerHeight = Math.round(heightPercent * (partnerPercentage / 100));
@@ -577,7 +507,8 @@ export const Dashboard: React.FC = () => {
                     </span>
                   </div>
                 );
-              })}
+              })
+              )}
             </div>
           </div>
 
@@ -624,7 +555,7 @@ export const Dashboard: React.FC = () => {
         />
         <StatCard
           title={selectedWarehouse === 'ALL' ? 'Active Vendors' : 'Depot Vendors'}
-          value={filteredVendorBreakdown.length}
+          value={selectedWarehouse === 'ALL' ? stats.users.activeVendors : filteredVendorBreakdown.length}
           subtitle={selectedWarehouse === 'ALL' ? `${stats.users.pendingKycVendors} pending KYC review` : `Operating in ${activeWarehouseObj.city}`}
           icon={Briefcase}
           color="amber"
@@ -632,7 +563,7 @@ export const Dashboard: React.FC = () => {
         />
         <StatCard
           title="Active Field Jobs"
-          value={selectedWarehouse === 'ALL' ? stats.bookings.activeJobs : Math.max(1, Math.round(stats.bookings.activeJobs * warehouseWeight))}
+          value={selectedWarehouse === 'ALL' ? stats.bookings.activeJobs : Math.round(stats.bookings.activeJobs * warehouseWeight)}
           subtitle={`${stats.bookings.todayBookings} scheduled for today`}
           icon={Calendar}
           color="sky"
@@ -734,7 +665,7 @@ export const Dashboard: React.FC = () => {
               {filteredVendorBreakdown.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-8 text-center text-slate-400 text-xs">
-                    No vendors attached to this warehouse depot yet.
+                    No active partner vendors registered yet. Onboard partners via the Partner Onboarding tab.
                   </td>
                 </tr>
               ) : (
