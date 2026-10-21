@@ -49,6 +49,21 @@ interface UploadedDocItem {
   fileSize?: string;
 }
 
+const MAX_ONBOARDING_DOCS = 30;
+
+const uploadMediaToCloud = async (dataUrl: string, folder: string): Promise<string> => {
+  const res = await apiClient.post(
+    '/admin/upload',
+    { image: dataUrl, folder },
+    { timeout: 120000 }
+  );
+  const url = res.data?.data?.url as string | undefined;
+  if (!url) {
+    throw new Error('Upload did not return a hosted file URL');
+  }
+  return url;
+};
+
 const WarehouseMiniMap: React.FC<{ lat: number; lng: number; title: string }> = ({ lat, lng, title }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
@@ -304,6 +319,7 @@ export const Vendors: React.FC = () => {
 
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDocItem[]>([]);
   const [docUploadError, setDocUploadError] = useState<string | null>(null);
+  const [docsUploading, setDocsUploading] = useState(false);
 
   const partnerFileInputRef = useRef<HTMLInputElement>(null);
   const warehouseFileInputRef = useRef<HTMLInputElement>(null);
@@ -318,13 +334,10 @@ export const Vendors: React.FC = () => {
     }
     try {
       const optimized = await compressImage(file, 800, 0.82);
-      setFormData((prev) => ({ ...prev, partnerImage: optimized }));
-    } catch {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setFormData((prev) => ({ ...prev, partnerImage: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
+      const hostedUrl = await uploadMediaToCloud(optimized, 'servfex/avatars');
+      setFormData((prev) => ({ ...prev, partnerImage: hostedUrl }));
+    } catch (err: any) {
+      alert(err.response?.data?.error?.message || err.message || 'Failed to upload partner photo');
     }
   };
 
@@ -337,56 +350,69 @@ export const Vendors: React.FC = () => {
     }
     try {
       const optimized = await compressImage(file, 1200, 0.82);
-      setFormData((prev) => ({ ...prev, warehouseImage: optimized }));
-    } catch {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setFormData((prev) => ({ ...prev, warehouseImage: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
+      const hostedUrl = await uploadMediaToCloud(optimized, 'servfex/warehouses');
+      setFormData((prev) => ({ ...prev, warehouseImage: hostedUrl }));
+    } catch (err: any) {
+      alert(err.response?.data?.error?.message || err.message || 'Failed to upload warehouse photo');
     }
   };
 
   const handleAddDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      setDocUploadError('Document file must be under 10MB');
+    const files = Array.from(e.target.files || []);
+    if (docFileInputRef.current) docFileInputRef.current.value = '';
+    if (files.length === 0) return;
+
+    if (uploadedDocs.length + files.length > MAX_ONBOARDING_DOCS) {
+      setDocUploadError(`You can attach up to ${MAX_ONBOARDING_DOCS} verification documents`);
       return;
     }
+
     setDocUploadError(null);
-    const defaultTitle = file.name.replace(/\.[^/.]+$/, '');
+    setDocsUploading(true);
 
     try {
-      let fileDataUrl: string;
-      if (file.type.startsWith('image/')) {
-        fileDataUrl = await compressImage(file, 1400, 0.85);
-      } else {
-        fileDataUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onerror = reject;
-          reader.onload = () => resolve(reader.result as string);
-          reader.readAsDataURL(file);
-        });
-      }
+      for (const file of files) {
+        if (file.size > 10 * 1024 * 1024) {
+          setDocUploadError(`"${file.name}" is over 10MB and was skipped`);
+          continue;
+        }
 
-      setUploadedDocs((prev) => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          type: 'OTHER',
-          title: defaultTitle,
-          fileUrl: fileDataUrl,
-          fileName: file.name,
-          fileSize:
-            file.size > 1024 * 1024
-              ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
-              : `${(file.size / 1024).toFixed(0)} KB`,
-        },
-      ]);
-      if (docFileInputRef.current) docFileInputRef.current.value = '';
+        let fileDataUrl: string;
+        if (file.type.startsWith('image/')) {
+          fileDataUrl = await compressImage(file, 1400, 0.85);
+        } else {
+          fileDataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = reject;
+            reader.onload = () => resolve(reader.result as string);
+            reader.readAsDataURL(file);
+          });
+        }
+
+        const hostedUrl = await uploadMediaToCloud(fileDataUrl, 'servfex/documents');
+        const defaultTitle = file.name.replace(/\.[^/.]+$/, '');
+
+        setUploadedDocs((prev) => [
+          ...prev,
+          {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            type: 'OTHER',
+            title: defaultTitle,
+            fileUrl: hostedUrl,
+            fileName: file.name,
+            fileSize:
+              file.size > 1024 * 1024
+                ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+                : `${(file.size / 1024).toFixed(0)} KB`,
+          },
+        ]);
+      }
     } catch (err: any) {
-      setDocUploadError(err.message || 'Failed to process document file');
+      setDocUploadError(
+        err.response?.data?.error?.message || err.message || 'Failed to process document file'
+      );
+    } finally {
+      setDocsUploading(false);
     }
   };
 
@@ -1293,17 +1319,27 @@ export const Vendors: React.FC = () => {
                       Attach Verification Documents
                     </span>
                     <span className="text-[11px] text-slate-400">
-                      Supports PDF, PNG, JPG, WebP up to 10MB
+                      Select multiple PDF, PNG, JPG, or WebP files — up to {MAX_ONBOARDING_DOCS} documents, 10MB each
                     </span>
                   </div>
 
                   <button
                     type="button"
                     onClick={() => docFileInputRef.current?.click()}
-                    className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition inline-flex items-center justify-center gap-2 shadow-xs shrink-0"
+                    disabled={docsUploading}
+                    className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition inline-flex items-center justify-center gap-2 shadow-xs shrink-0 disabled:opacity-60"
                   >
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>Choose File to Upload</span>
+                    {docsUploading ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Uploading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Choose Files to Upload</span>
+                      </>
+                    )}
                   </button>
                   <input
                     ref={docFileInputRef}
@@ -1311,6 +1347,7 @@ export const Vendors: React.FC = () => {
                     name="docFile"
                     type="file"
                     accept=".pdf,image/*"
+                    multiple
                     className="hidden"
                     onChange={handleAddDocument}
                   />
@@ -1381,7 +1418,7 @@ export const Vendors: React.FC = () => {
                 </div>
               ) : (
                 <p className="text-[11px] text-slate-400 italic">
-                  No documents attached yet. Click "Choose File to Upload" to attach files.
+                  No documents attached yet. Click "Choose Files to Upload" to attach as many as you need.
                 </p>
               )}
             </div>
@@ -1397,7 +1434,7 @@ export const Vendors: React.FC = () => {
             </button>
             <button
               type="submit"
-              disabled={createMutation.isPending}
+              disabled={createMutation.isPending || docsUploading}
               className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition disabled:opacity-50 inline-flex items-center gap-2"
             >
               {createMutation.isPending ? (

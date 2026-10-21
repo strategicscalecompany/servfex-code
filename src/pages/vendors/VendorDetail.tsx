@@ -202,7 +202,7 @@ export const VendorDetail: React.FC = () => {
     },
   });
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -217,16 +217,31 @@ export const VendorDetail: React.FC = () => {
     }
     setUploadError(null);
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setDocFileUrl(reader.result);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Failed to read the file.'));
+        reader.onload = () => {
+          if (typeof reader.result === 'string') resolve(reader.result);
+          else reject(new Error('Failed to read the file.'));
+        };
+        reader.readAsDataURL(file);
+      });
+
+      const res = await apiClient.post(
+        '/admin/upload',
+        { image: dataUrl, folder: 'servfex/documents' },
+        { timeout: 120000 }
+      );
+      const url = res.data?.data?.url as string | undefined;
+      if (!url) {
+        throw new Error('Upload did not return a hosted file URL');
       }
-    };
-    reader.onerror = () => {
-      setUploadError('Failed to read the file.');
-    };
-    reader.readAsDataURL(file);
+      setDocFileUrl(url);
+    } catch (err: any) {
+      setDocFileUrl('');
+      setUploadError(err.response?.data?.error?.message || err.message || 'Failed to upload document');
+    }
   };
 
   const handleUploadSubmit = (e: React.FormEvent) => {
@@ -1197,9 +1212,9 @@ export const VendorDetail: React.FC = () => {
               placeholder="https://example.com/documents/license.pdf"
               className="w-full text-xs font-medium rounded-xl border border-slate-200 px-3 py-2.5 focus:border-indigo-500 focus:outline-none font-mono"
             />
-            {docFileUrl.startsWith('data:') && (
+            {docFileUrl && !docFileUrl.startsWith('data:') && selectedFileName && (
               <p className="text-[11px] text-emerald-600 font-medium">
-                Using locally attached file data ({selectedFileName})
+                File hosted and ready ({selectedFileName})
               </p>
             )}
           </div>
