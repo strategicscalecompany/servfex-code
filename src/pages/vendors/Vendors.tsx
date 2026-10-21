@@ -47,15 +47,24 @@ interface UploadedDocItem {
   fileUrl: string;
   fileName: string;
   fileSize?: string;
+  fileSizeBytes?: number;
 }
 
 const MAX_ONBOARDING_DOCS = 30;
+const MAX_ONBOARDING_TOTAL_BYTES = 500 * 1024 * 1024;
+const UPLOAD_TIMEOUT_MS = 15 * 60 * 1000;
+
+const formatBytes = (bytes: number): string => {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${bytes} B`;
+};
 
 const uploadMediaToCloud = async (dataUrl: string, folder: string): Promise<string> => {
   const res = await apiClient.post(
     '/admin/upload',
     { image: dataUrl, folder },
-    { timeout: 120000 }
+    { timeout: UPLOAD_TIMEOUT_MS }
   );
   const url = res.data?.data?.url as string | undefined;
   if (!url) {
@@ -367,13 +376,24 @@ export const Vendors: React.FC = () => {
       return;
     }
 
+    const usedBytes = uploadedDocs.reduce((sum, doc) => sum + (doc.fileSizeBytes || 0), 0);
+    const incomingBytes = files.reduce((sum, file) => sum + file.size, 0);
+    if (usedBytes + incomingBytes > MAX_ONBOARDING_TOTAL_BYTES) {
+      const remaining = Math.max(0, MAX_ONBOARDING_TOTAL_BYTES - usedBytes);
+      setDocUploadError(
+        `Documents cannot exceed 500MB in total. ${formatBytes(remaining)} remaining.`
+      );
+      return;
+    }
+
     setDocUploadError(null);
     setDocsUploading(true);
 
     try {
+      let runningTotal = usedBytes;
       for (const file of files) {
-        if (file.size > 10 * 1024 * 1024) {
-          setDocUploadError(`"${file.name}" is over 10MB and was skipped`);
+        if (runningTotal + file.size > MAX_ONBOARDING_TOTAL_BYTES) {
+          setDocUploadError(`"${file.name}" was skipped because it would exceed the 500MB total limit`);
           continue;
         }
 
@@ -400,12 +420,11 @@ export const Vendors: React.FC = () => {
             title: defaultTitle,
             fileUrl: hostedUrl,
             fileName: file.name,
-            fileSize:
-              file.size > 1024 * 1024
-                ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
-                : `${(file.size / 1024).toFixed(0)} KB`,
+            fileSize: formatBytes(file.size),
+            fileSizeBytes: file.size,
           },
         ]);
+        runningTotal += file.size;
       }
     } catch (err: any) {
       setDocUploadError(
@@ -1306,7 +1325,7 @@ export const Vendors: React.FC = () => {
                 </div>
                 {uploadedDocs.length > 0 && (
                   <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
-                    {uploadedDocs.length} attached
+                    {uploadedDocs.length} attached · {formatBytes(uploadedDocs.reduce((sum, doc) => sum + (doc.fileSizeBytes || 0), 0))} / 500 MB
                   </span>
                 )}
               </div>
@@ -1319,7 +1338,7 @@ export const Vendors: React.FC = () => {
                       Attach Verification Documents
                     </span>
                     <span className="text-[11px] text-slate-400">
-                      Select multiple PDF, PNG, JPG, or WebP files — up to {MAX_ONBOARDING_DOCS} documents, 10MB each
+                      Select multiple PDF, PNG, JPG, or WebP files — up to {MAX_ONBOARDING_DOCS} documents, 500MB total
                     </span>
                   </div>
 

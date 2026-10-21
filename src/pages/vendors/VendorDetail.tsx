@@ -206,8 +206,8 @@ export const VendorDetail: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      setUploadError('File size must be under 10MB');
+    if (file.size > 500 * 1024 * 1024) {
+      setUploadError('File size must be 500MB or smaller');
       return;
     }
 
@@ -231,7 +231,7 @@ export const VendorDetail: React.FC = () => {
       const res = await apiClient.post(
         '/admin/upload',
         { image: dataUrl, folder: 'servfex/documents' },
-        { timeout: 120000 }
+        { timeout: 15 * 60 * 1000 }
       );
       const url = res.data?.data?.url as string | undefined;
       if (!url) {
@@ -1176,7 +1176,7 @@ export const VendorDetail: React.FC = () => {
 
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-700">
-              Select File (PDF or Image, max 10MB) <span className="text-rose-500">*</span>
+              Select File (PDF or Image, max 500MB) <span className="text-rose-500">*</span>
             </label>
             <div className="border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-2xl p-5 text-center transition bg-slate-50/50 hover:bg-slate-50 cursor-pointer relative">
               <input
@@ -1194,7 +1194,7 @@ export const VendorDetail: React.FC = () => {
               ) : (
                 <div>
                   <p className="text-xs font-bold text-slate-700">Click or drag a file to upload</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Supports PDF, PNG, JPG, or WEBP up to 10MB</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Supports PDF, PNG, JPG, or WEBP up to 500MB</p>
                 </div>
               )}
             </div>
