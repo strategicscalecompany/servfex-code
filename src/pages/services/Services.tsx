@@ -2443,6 +2443,7 @@ export const Services: React.FC = () => {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(100);
 
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
   const [addServiceCategory, setAddServiceCategory] = useState<ServiceCategory | null>(null);
@@ -2469,11 +2470,11 @@ export const Services: React.FC = () => {
   const [assignError, setAssignError] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['services', search, categoryFilter, page],
+    queryKey: ['services', search, categoryFilter, page, pageSize],
     queryFn: async () => {
       const params = new URLSearchParams({
         page: page.toString(),
-        limit: '12',
+        limit: pageSize.toString(),
         ...(categoryFilter ? { categoryId: categoryFilter } : {}),
         ...(search ? { search } : {}),
       });
@@ -2766,6 +2767,17 @@ export const Services: React.FC = () => {
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
+                <select
+                  value={pageSize}
+                  onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                  className="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 focus:outline-none focus:border-indigo-500 bg-white"
+                  title="Items per page"
+                >
+                  <option value={100}>Show All on 1 Page (100)</option>
+                  <option value={50}>50 per page</option>
+                  <option value={25}>25 per page</option>
+                  <option value={12}>12 per page</option>
+                </select>
               </div>
 
               {/* Service Rectangular Tiles (Bar Style) */}
@@ -2905,28 +2917,38 @@ export const Services: React.FC = () => {
                 </div>
               )}
 
-              {/* Pagination */}
-              {pagination && pagination.totalPages > 1 && (
-                <div className="flex items-center justify-center gap-3 pt-2">
-                  <button
-                    disabled={page === 1}
-                    onClick={() => setPage(page - 1)}
-                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 hover:bg-gray-50"
-                  >
-                    Previous
-                  </button>
-                  <span className="text-sm text-gray-500">
-                    Page {page} of {pagination.totalPages}
+              {/* Services Footer Stats & Optional Pagination */}
+              {pagination && pagination.totalPages > 1 ? (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-gray-100">
+                  <span className="text-xs text-gray-500">
+                    Showing <span className="font-semibold text-gray-700">{services.length}</span> of{' '}
+                    <span className="font-semibold text-gray-700">{pagination.total}</span> services
                   </span>
-                  <button
-                    disabled={page === pagination.totalPages}
-                    onClick={() => setPage(page + 1)}
-                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 hover:bg-gray-50"
-                  >
-                    Next
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={page === 1}
+                      onClick={() => setPage(page - 1)}
+                      className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold disabled:opacity-40 hover:bg-gray-50 transition"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-xs text-gray-600 px-1 font-medium">
+                      Page {page} of {pagination.totalPages}
+                    </span>
+                    <button
+                      disabled={page === pagination.totalPages}
+                      onClick={() => setPage(page + 1)}
+                      className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold disabled:opacity-40 hover:bg-gray-50 transition"
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
-              )}
+              ) : pagination && pagination.total > 0 ? (
+                <div className="text-center pt-3 border-t border-gray-100 text-xs text-gray-400">
+                  Showing all <span className="font-semibold text-gray-700">{pagination.total}</span> services on this page
+                </div>
+              ) : null}
             </>
           )}
         </div>
