@@ -16,6 +16,7 @@ import {
   MoreVertical,
   X,
   UserCheck,
+  FileText,
 } from 'lucide-react';
 import { Modal } from '../../components/common/Modal';
 
@@ -31,6 +32,7 @@ interface WhiteCollarEmployee {
   joinedDate: string;
   avatarBg: string;
   reportsTo: string;
+  document?: string;
 }
 
 const INITIAL_WHITE_COLLARS: WhiteCollarEmployee[] = [
@@ -126,11 +128,7 @@ export const WhiteCollars: React.FC = () => {
     name: '',
     email: '',
     phone: '',
-    department: 'HR & Talent' as WhiteCollarEmployee['department'],
-    role: '',
-    location: 'Corporate HQ - Hyderabad',
-    status: 'Active' as WhiteCollarEmployee['status'],
-    reportsTo: '',
+    document: '',
   });
 
   const filteredEmployees = employees.filter((emp) => {
@@ -153,13 +151,14 @@ export const WhiteCollars: React.FC = () => {
       name: formData.name,
       email: formData.email,
       phone: formData.phone,
-      department: formData.department,
-      role: formData.role,
-      location: formData.location,
-      status: formData.status,
+      document: formData.document || 'ID_Verification.pdf',
+      department: 'Executive Office',
+      role: 'Corporate Staff',
+      location: 'Corporate HQ - Hyderabad',
+      status: 'Active',
       joinedDate: 'Just now',
       avatarBg: 'bg-indigo-600',
-      reportsTo: formData.reportsTo || 'Super Admin',
+      reportsTo: 'Super Admin',
     };
 
     setEmployees([newEmp, ...employees]);
@@ -168,11 +167,7 @@ export const WhiteCollars: React.FC = () => {
       name: '',
       email: '',
       phone: '',
-      department: 'HR & Talent',
-      role: '',
-      location: 'Corporate HQ - Hyderabad',
-      status: 'Active',
-      reportsTo: '',
+      document: '',
     });
   };
 
@@ -449,10 +444,17 @@ export const WhiteCollars: React.FC = () => {
                 </span>
               </div>
               <div className="p-3.5 rounded-xl border border-slate-200 bg-white">
-                <span className="text-slate-400 font-bold uppercase block mb-1">Corporate Email</span>
+                <span className="text-slate-400 font-bold uppercase block mb-1">Email</span>
                 <span className="font-bold text-slate-800 flex items-center gap-1.5 truncate">
                   <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   {selectedStaff.email}
+                </span>
+              </div>
+              <div className="p-3.5 rounded-xl border border-slate-200 bg-white">
+                <span className="text-slate-400 font-bold uppercase block mb-1">Document</span>
+                <span className="font-bold text-slate-800 flex items-center gap-1.5 truncate">
+                  <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  {selectedStaff.document || 'Verified (Govt ID)'}
                 </span>
               </div>
               <div className="p-3.5 rounded-xl border border-slate-200 bg-white">
@@ -494,109 +496,67 @@ export const WhiteCollars: React.FC = () => {
       )}
 
       {/* Add White Collar Modal */}
-      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Register White Collar Staff" maxWidth="lg">
+      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Register White Collar Staff" maxWidth="md">
         <form onSubmit={handleAddEmployee} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Full Name</label>
-              <input
-                type="text"
-                required
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g. Vikram Singhania"
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Corporate Email</label>
-              <input
-                type="email"
-                required
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="e.g. vikram.s@servfex.com"
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-900"
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Full Name</label>
+            <input
+              type="text"
+              required
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder="e.g. Vikram Singhania"
+              className="w-full p-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-900"
+            />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Phone Number</label>
-              <input
-                type="tel"
-                required
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="+91 98000 00000"
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Department</label>
-              <select
-                value={formData.department}
-                onChange={(e) => setFormData({ ...formData, department: e.target.value as any })}
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-900"
-              >
-                <option value="HR & Talent">HR & Talent</option>
-                <option value="Finance & Accounts">Finance & Accounts</option>
-                <option value="Legal & Compliance">Legal & Compliance</option>
-                <option value="Marketing & Growth">Marketing & Growth</option>
-                <option value="Operations Admin">Operations Admin</option>
-                <option value="Executive Office">Executive Office</option>
-              </select>
-            </div>
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Email</label>
+            <input
+              type="email"
+              required
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              placeholder="e.g. vikram.s@servfex.com"
+              className="w-full p-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-900"
+            />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Role / Designation</label>
-              <input
-                type="text"
-                required
-                value={formData.role}
-                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                placeholder="e.g. Senior Compensation Analyst"
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Office Location</label>
-              <input
-                type="text"
-                required
-                value={formData.location}
-                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                placeholder="e.g. Corporate HQ - Hyderabad"
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-900"
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Phone Number</label>
+            <input
+              type="tel"
+              required
+              value={formData.phone}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              placeholder="+91 98000 00000"
+              className="w-full p-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-900"
+            />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Reporting Line</label>
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Document</label>
+            <div className="relative border border-slate-200 rounded-xl p-2.5 bg-white hover:border-slate-400 transition flex items-center justify-between">
               <input
-                type="text"
-                value={formData.reportsTo}
-                onChange={(e) => setFormData({ ...formData, reportsTo: e.target.value })}
-                placeholder="e.g. Aditi Sharma (HR Lead)"
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-900"
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setFormData({ ...formData, document: file.name });
+                  }
+                }}
+                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
               />
-            </div>
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Status</label>
-              <select
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-900"
-              >
-                <option value="Active">Active</option>
-                <option value="Remote">Remote</option>
-                <option value="On Leave">On Leave</option>
-              </select>
+              <div className="flex items-center gap-2 truncate pr-2">
+                <FileText className="w-4 h-4 text-slate-400 shrink-0" />
+                <span className={formData.document ? 'text-sm font-medium text-slate-800 truncate' : 'text-sm text-slate-400 truncate'}>
+                  {formData.document || 'Upload document (PDF, PNG, JPG, DOC)'}
+                </span>
+              </div>
+              <span className="text-xs font-semibold px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg shrink-0 pointer-events-none">
+                Browse
+              </span>
             </div>
           </div>
 

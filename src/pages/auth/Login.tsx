@@ -104,7 +104,7 @@ export const Login: React.FC = () => {
 
           <div className="mt-8 pt-6 border-t border-zinc-800/80 text-center">
             <p className="text-xs text-zinc-500 font-medium leading-relaxed">
-              Only authorized Super Admin emails configured in PostgreSQL can gain access.
+              Only authorized Super Admin emails can gain access.
             </p>
           </div>
         </div>

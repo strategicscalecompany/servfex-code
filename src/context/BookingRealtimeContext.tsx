@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { io, Socket } from 'socket.io-client';
-import { onAuthStateChanged } from 'firebase/auth';
 import { auth, isFirebaseWebConfigured } from '../config/firebase';
+import { useAuth } from './AuthContext';
 
 export interface NewBookingAlert {
   bookingId: string;
@@ -57,6 +57,7 @@ const playNotificationChime = () => {
 };
 
 export const BookingRealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isSuperAdmin, isLoading: isAuthLoading } = useAuth();
   const queryClient = useQueryClient();
   const [newBooking, setNewBooking] = useState<NewBookingAlert | null>(null);
   const [highlightedBookingNumbers, setHighlightedBookingNumbers] = useState<string[]>([]);
@@ -84,12 +85,17 @@ export const BookingRealtimeProvider: React.FC<{ children: React.ReactNode }> = 
       }
 
       const socket: Socket = io(SOCKET_URL, {
+        path: '/api/socket.io',
         auth: { token },
-        transports: ['websocket', 'polling'],
+        // Stay on HTTP polling. nginx currently proxies /api but the websocket
+        // upgrade is dropped, which invalidates the Engine.IO sid (polling 400).
+        transports: ['polling'],
+        upgrade: false,
+        withCredentials: true,
         reconnection: true,
-        reconnectionAttempts: Infinity,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
+        reconnectionAttempts: 10,
+        reconnectionDelay: 2000,
+        reconnectionDelayMax: 15000,
       });
 
       socketRef.current = socket;
@@ -112,9 +118,8 @@ export const BookingRealtimeProvider: React.FC<{ children: React.ReactNode }> = 
           try {
             const freshToken = await auth.currentUser.getIdToken(true);
             socket.auth = { token: freshToken };
-            socket.connect();
           } catch {
-            // Reconnection loop will retry
+            // Built-in reconnection will retry with the last token
           }
         }
       });
@@ -179,48 +184,40 @@ export const BookingRealtimeProvider: React.FC<{ children: React.ReactNode }> = 
       });
     };
 
-    if (isFirebaseWebConfigured()) {
-      const unsubscribe = onAuthStateChanged(auth, async (user) => {
-        if (user) {
-          try {
-            const token = await user.getIdToken();
-            if (active) {
-              initializeSocket(token);
-            }
-          } catch (err) {
-            console.warn('Realtime socket token retrieval failed:', err);
-          }
-        } else {
-          if (socketRef.current) {
-            socketRef.current.disconnect();
-            socketRef.current = null;
-          }
-          if (active) setIsConnected(false);
-        }
-      });
-
-      return () => {
-        active = false;
-        unsubscribe();
-        if (socketRef.current) {
-          socketRef.current.disconnect();
-          socketRef.current = null;
-        }
-      };
-    } else {
-      const token = localStorage.getItem('token') || '';
-      if (token) {
-        initializeSocket(token);
+    if (isAuthLoading || !isSuperAdmin) {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
       }
+      setIsConnected(false);
       return () => {
         active = false;
-        if (socketRef.current) {
-          socketRef.current.disconnect();
-          socketRef.current = null;
-        }
       };
     }
-  }, [refreshQueries]);
+
+    const connect = async () => {
+      try {
+        const token = isFirebaseWebConfigured()
+          ? (await auth.currentUser?.getIdToken()) || ''
+          : localStorage.getItem('token') || '';
+        if (active && token) {
+          initializeSocket(token);
+        }
+      } catch (err) {
+        console.warn('Realtime socket token retrieval failed:', err);
+      }
+    };
+
+    void connect();
+
+    return () => {
+      active = false;
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    };
+  }, [refreshQueries, isAuthLoading, isSuperAdmin]);
 
   const isHighlighted = useCallback(
     (id?: string, bookingNumber?: string): boolean => {

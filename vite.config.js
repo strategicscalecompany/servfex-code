@@ -17,7 +17,10 @@ export default defineConfig({
             '/api': {
                 target: 'https://api.servfex.com',
                 changeOrigin: true,
-                secure: false,
+                secure: true,
+                ws: true,
+                timeout: 15 * 60 * 1000,
+                proxyTimeout: 15 * 60 * 1000,
             },
         },
     },

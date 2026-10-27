@@ -171,6 +171,9 @@ export interface ServiceSubCategory {
   id: string;
   categoryId: string;
   name: string;
+  iconUrl?: string | null;
+  bannerImages?: string[];
+  bannerVideo?: string | null;
   displayOrder: number;
   isActive: boolean;
   createdAt: string;
@@ -222,6 +225,7 @@ export interface ServicePackage {
   name: string;
   shortDescription?: string | null;
   badgeText?: string | null;
+  sectionTitle?: string | null;
   originalPrice: string | number;
   discountedPrice: string | number;
   savingsLabel?: string | null;
@@ -229,12 +233,21 @@ export interface ServicePackage {
   duration: string;
   cardImage?: string | null;
   detailBannerImages: string[];
+  detailBannerVideo?: string | null;
+  offersBanner?: string | null;
+  highlightsTitle?: string | null;
   highlights: string[];
+  processTitle?: string | null;
   processSteps: ProcessStep[];
+  whatsIncludedTitle?: string | null;
   whatsIncluded: string[];
+  requirementsTitle?: string | null;
   requirements: Requirement[];
+  pleaseNoteTitle?: string | null;
   pleaseNote: string[];
+  faqsTitle?: string | null;
   faqs: FAQ[];
+  reviews?: Array<{ reviewerName: string; rating: number; comment: string; date?: string }>;
   displayOrder: number;
   isActive: boolean;
   // Deprecated legacy fields kept for booking compat

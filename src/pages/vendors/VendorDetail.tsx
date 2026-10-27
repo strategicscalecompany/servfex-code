@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../api/client';
+import { hostMediaIfNeeded } from '../../api/upload';
 import { VendorProfile, Booking } from '../../types';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
@@ -228,12 +229,7 @@ export const VendorDetail: React.FC = () => {
         reader.readAsDataURL(file);
       });
 
-      const res = await apiClient.post(
-        '/admin/upload',
-        { image: dataUrl, folder: 'servfex/documents' },
-        { timeout: 15 * 60 * 1000 }
-      );
-      const url = res.data?.data?.url as string | undefined;
+      const url = await hostMediaIfNeeded(dataUrl, 'servfex/documents');
       if (!url) {
         throw new Error('Upload did not return a hosted file URL');
       }

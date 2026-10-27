@@ -45,15 +45,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       try {
-        // Query PostgreSQL via backend to load ServFex user and verify SUPER_ADMIN authority
-        const res = await apiClient.get('/auth/me');
+        const token = await fbUser.getIdToken();
+        const res = await apiClient.get('/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (res.data?.success && res.data?.data?.user) {
-          const pgUser = res.data.data.user;
+          const dbUser = res.data.data.user;
 
-          if (pgUser.role === 'SUPER_ADMIN') {
-            setUser(pgUser);
+          if (dbUser.role === 'SUPER_ADMIN') {
+            setUser(dbUser);
           } else {
-            // Non-Super Admin: sign out immediately
             await signOut(auth);
             setUser(null);
             console.warn('Blocked non-Super Admin account from accessing Control Panel');
@@ -62,7 +63,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUser(null);
         }
       } catch (err: any) {
-        console.warn('Failed to verify Super Admin status in PostgreSQL', err);
+        const apiError = err?.response?.data?.error;
+        console.warn('Failed to verify Super Admin status', apiError || err);
         setUser(null);
       } finally {
         setIsLoading(false);
@@ -82,21 +84,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 1. Firebase handles identity & credentials
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
 
-    // 2. Fetch PostgreSQL record to verify Super Admin role authority
-    const res = await apiClient.get('/auth/me');
+    const token = await userCredential.user.getIdToken();
+    const res = await apiClient.get('/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     if (res.data?.success && res.data?.data?.user) {
-      const pgUser = res.data.data.user;
-      if (pgUser.role !== 'SUPER_ADMIN') {
+      const dbUser = res.data.data.user;
+      if (dbUser.role !== 'SUPER_ADMIN') {
         await signOut(auth);
         setUser(null);
         throw new Error('Access denied: Only SUPER_ADMIN accounts are authorized to access this Control Panel.');
       }
-      setUser(pgUser);
+      setUser(dbUser);
       setFirebaseUser(userCredential.user);
     } else {
       await signOut(auth);
       setUser(null);
-      throw new Error('User account not found in ServFex PostgreSQL database.');
+      throw new Error('User account not found in the ServFex database.');
     }
   };
 
@@ -111,18 +115,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     provider.setCustomParameters({ prompt: 'select_account' });
     const userCredential = await signInWithPopup(auth, provider);
 
-    // Fetch PostgreSQL record to verify Super Admin authority
-    const res = await apiClient.get('/auth/me');
+    const token = await userCredential.user.getIdToken();
+    const res = await apiClient.get('/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     if (res.data?.success && res.data?.data?.user) {
-      const pgUser = res.data.data.user;
-      if (pgUser.role !== 'SUPER_ADMIN') {
+      const dbUser = res.data.data.user;
+      if (dbUser.role !== 'SUPER_ADMIN') {
         await signOut(auth);
         setUser(null);
         throw new Error(
-          `Access denied: Google account (${userCredential.user.email}) is not authorized as Super Admin in PostgreSQL.`
+          `Access denied: Google account (${userCredential.user.email}) is not authorized as Super Admin.`
         );
       }
-      setUser(pgUser);
+      setUser(dbUser);
       setFirebaseUser(userCredential.user);
     } else {
       await signOut(auth);

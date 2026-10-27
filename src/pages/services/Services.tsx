@@ -1,6 +1,8 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../api/client';
+import { hostMediaIfNeeded, hostMediaList } from '../../api/upload';
 import { Service, ServiceCategory, ServiceSubCategory, ServicePackage } from '../../types';
 import { Modal } from '../../components/common/Modal';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
@@ -42,6 +44,10 @@ import {
   Droplets,
   Zap,
   ShieldCheck,
+  FolderTree,
+  FolderOpen,
+  CheckCircle,
+  XCircle,
 } from 'lucide-react';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -53,6 +59,9 @@ const toBase64 = (file: File): Promise<string> =>
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = reject;
   });
+
+const autoSlug = (name: string) =>
+  name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 // ─── Icon Upload (reused from Categories) ────────────────────────────────────
 
@@ -179,7 +188,7 @@ const ImageSlot: React.FC<{
 
 const PackageManager: React.FC<{ service: Service; onClose: () => void }> = ({ service, onClose }) => {
   const queryClient = useQueryClient();
-  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isAddPkgOpen, setIsAddPkgOpen] = useState(false);
   const [editingPkg, setEditingPkg] = useState<ServicePackage | null>(null);
   const [deletingPkg, setDeletingPkg] = useState<ServicePackage | null>(null);
 
@@ -208,7 +217,7 @@ const PackageManager: React.FC<{ service: Service; onClose: () => void }> = ({ s
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-gray-900">{service.name} — Packages</h3>
         <button
-          onClick={() => setIsAddOpen(true)}
+          onClick={() => setIsAddPkgOpen(true)}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition"
         >
           <Plus className="w-3.5 h-3.5" /> Add Package
@@ -287,8 +296,8 @@ const PackageManager: React.FC<{ service: Service; onClose: () => void }> = ({ s
 
       {/* Add/Edit Package Modal */}
       <Modal
-        isOpen={isAddOpen || !!editingPkg}
-        onClose={() => { setIsAddOpen(false); setEditingPkg(null); }}
+        isOpen={isAddPkgOpen || !!editingPkg}
+        onClose={() => { setIsAddPkgOpen(false); setEditingPkg(null); }}
         title={editingPkg ? `Edit: ${editingPkg.name}` : 'Add Package'}
         maxWidth="2xl"
       >
@@ -297,10 +306,10 @@ const PackageManager: React.FC<{ service: Service; onClose: () => void }> = ({ s
           existing={editingPkg}
           onSuccess={() => {
             queryClient.invalidateQueries({ queryKey: ['packages', service.id] });
-            setIsAddOpen(false);
+            setIsAddPkgOpen(false);
             setEditingPkg(null);
           }}
-          onCancel={() => { setIsAddOpen(false); setEditingPkg(null); }}
+          onCancel={() => { setIsAddPkgOpen(false); setEditingPkg(null); }}
         />
       </Modal>
 
@@ -371,6 +380,23 @@ const PackageForm: React.FC<PackageFormProps> = ({ serviceId, existing, onSucces
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const cardImage = await hostMediaIfNeeded(cardImagePreview, 'servfex/packages/cards');
+      const detailBannerImages = await hostMediaList(detailBanners, 'servfex/packages/banners');
+      const hostedProcessSteps = await Promise.all(
+        processSteps.map(async (s, i) => ({
+          stepNumber: i + 1,
+          title: s.title,
+          description: s.description,
+          imageUrl: (await hostMediaIfNeeded(s.imagePreview, 'servfex/packages/steps')) ?? null,
+        }))
+      );
+      const hostedRequirements = await Promise.all(
+        requirements.map(async (r) => ({
+          iconUrl: (await hostMediaIfNeeded(r.iconPreview, 'servfex/packages/icons')) ?? '',
+          label: r.label,
+        }))
+      );
+
       const payload = {
         name: name.trim(),
         shortDescription: shortDescription.trim() || undefined,
@@ -380,17 +406,12 @@ const PackageForm: React.FC<PackageFormProps> = ({ serviceId, existing, onSucces
         savingsLabel: savingsLabel.trim() || undefined,
         pricePerUnitLabel: pricePerUnitLabel.trim() || undefined,
         duration: duration.trim(),
-        cardImage: cardImagePreview || undefined,
-        detailBannerImages: detailBanners.filter(Boolean) as string[],
+        cardImage,
+        detailBannerImages,
         highlights,
-        processSteps: processSteps.map((s, i) => ({
-          stepNumber: i + 1,
-          title: s.title,
-          description: s.description,
-          imageUrl: s.imagePreview ?? null,
-        })),
+        processSteps: hostedProcessSteps,
         whatsIncluded,
-        requirements: requirements.map((r) => ({ iconUrl: r.iconPreview ?? '', label: r.label })),
+        requirements: hostedRequirements,
         pleaseNote,
         faqs,
         displayOrder,
@@ -657,15 +678,16 @@ const PackageForm: React.FC<PackageFormProps> = ({ serviceId, existing, onSucces
 
 interface AddServiceFormProps {
   categories: ServiceCategory[];
+  initialCategory?: ServiceCategory | null;
   onSuccess: () => void;
   onCancel: () => void;
 }
 
-const AddServiceForm: React.FC<AddServiceFormProps> = ({ categories, onSuccess, onCancel }) => {
+const AddServiceForm: React.FC<AddServiceFormProps> = ({ categories, initialCategory, onSuccess, onCancel }) => {
   const queryClient = useQueryClient();
   const [step, setStep] = useState(1);
   // Step 1 — Category & Sub-category (Direct text input with auto-matching / auto-creation)
-  const [categoryName, setCategoryName] = useState('');
+  const [categoryName, setCategoryName] = useState(initialCategory?.name || '');
   const [subCategoryName, setSubCategoryName] = useState('');
   // Step 2 — Name & Icon
   const [name, setName] = useState('');
@@ -747,16 +769,21 @@ const AddServiceForm: React.FC<AddServiceFormProps> = ({ categories, onSuccess, 
         }
       }
 
-      // 3. Create Service
+      // 3. Host media first so POST /admin/services stays a small JSON body.
+      // Shipping data-URIs through the Vite proxy resets the connection.
+      const iconUrl = await hostMediaIfNeeded(iconPreview, 'servfex/services/icons');
+      const bannerImages = await hostMediaList(banners, 'servfex/services/banners');
+      const bannerVideo = await hostMediaIfNeeded(videoFile, 'servfex/services/videos');
+
       await apiClient.post('/admin/services', {
         categoryId: resolvedCategoryId,
         subCategoryId: resolvedSubCategoryId || undefined,
         name: name.trim(),
         slug: autoSlug(name),
         description: description.trim() || name.trim(),
-        iconUrl: iconPreview || undefined,
-        bannerImages: banners.filter(Boolean) as string[],
-        bannerVideo: videoFile || undefined,
+        iconUrl,
+        bannerImages,
+        bannerVideo,
         startingPrice: parseFloat(startingPrice) || 0,
         priceUnit: priceUnit.trim(),
         durationText: durationText.trim(),
@@ -812,106 +839,48 @@ const AddServiceForm: React.FC<AddServiceFormProps> = ({ categories, onSuccess, 
         {step === 1 && (
           <div className="space-y-4">
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="label-xs">Category Name *</label>
-                {categoryName.trim() && (
-                  matchedCategory ? (
-                    <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
-                      <Check className="w-3 h-3" /> Existing Category
-                    </span>
-                  ) : (
-                    <span className="text-[11px] font-semibold text-indigo-600 flex items-center gap-1">
-                      <Sparkles className="w-3 h-3" /> New Category (will auto-create)
-                    </span>
-                  )
-                )}
-              </div>
-              <input
-                type="text"
+              <label className="label-xs mb-1 block">Category *</label>
+              <select
                 required
                 value={categoryName}
-                onChange={(e) => setCategoryName(e.target.value)}
-                placeholder="Type category name (e.g. AC & Appliance Repair)"
-                list="category-options-list"
+                onChange={(e) => {
+                  setCategoryName(e.target.value);
+                  setSubCategoryName('');
+                }}
                 className="input-sm w-full"
-                autoFocus
-              />
-              <datalist id="category-options-list">
+              >
+                <option value="">— Select Category —</option>
                 {categories.map((c) => (
-                  <option key={c.id} value={c.name} />
+                  <option key={c.id} value={c.name}>
+                    {c.name}
+                  </option>
                 ))}
-              </datalist>
-
-              {/* Quick-fill pills for existing categories */}
-              {categories.length > 0 && !matchedCategory && (
-                <div className="mt-2">
-                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">
-                    Existing Categories (click to fill):
-                  </span>
-                  <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-                    {categories.slice(0, 8).map((c) => (
-                      <button
-                        type="button"
-                        key={c.id}
-                        onClick={() => setCategoryName(c.name)}
-                        className="text-xs px-2 py-0.5 rounded-md bg-gray-100 hover:bg-indigo-50 hover:text-indigo-600 text-gray-600 transition"
-                      >
-                        {c.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+              </select>
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="label-xs">Sub-Category Name (optional)</label>
-                {subCategoryName.trim() && (
-                  matchedSubCategory ? (
-                    <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
-                      <Check className="w-3 h-3" /> Existing Sub-Category
-                    </span>
-                  ) : (
-                    <span className="text-[11px] font-semibold text-indigo-600 flex items-center gap-1">
-                      <Sparkles className="w-3 h-3" /> New Sub-Category (will auto-create)
-                    </span>
-                  )
-                )}
-              </div>
-              <input
-                type="text"
-                value={subCategoryName}
-                onChange={(e) => setSubCategoryName(e.target.value)}
-                placeholder="Type sub-category name (e.g. AC Service & Repair)"
-                list="subcategory-options-list"
-                className="input-sm w-full"
-              />
-              <datalist id="subcategory-options-list">
-                {subCategories.map((sc) => (
-                  <option key={sc.id} value={sc.name} />
-                ))}
-              </datalist>
-
-              {/* Quick-fill pills for existing subcategories */}
-              {subCategories.length > 0 && !matchedSubCategory && (
-                <div className="mt-2">
-                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">
-                    Existing Sub-Categories in {matchedCategory?.name} (click to fill):
-                  </span>
-                  <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto">
-                    {subCategories.map((sc) => (
-                      <button
-                        type="button"
-                        key={sc.id}
-                        onClick={() => setSubCategoryName(sc.name)}
-                        className="text-xs px-2 py-0.5 rounded-md bg-gray-100 hover:bg-indigo-50 hover:text-indigo-600 text-gray-600 transition"
-                      >
-                        {sc.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+              <label className="label-xs mb-1 block">Sub-Category (Optional)</label>
+              {subCategories.length > 0 ? (
+                <select
+                  value={subCategoryName}
+                  onChange={(e) => setSubCategoryName(e.target.value)}
+                  className="input-sm w-full"
+                >
+                  <option value="">— Select Sub-Category (Optional) —</option>
+                  {subCategories.map((sc) => (
+                    <option key={sc.id} value={sc.name}>
+                      {sc.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={subCategoryName}
+                  onChange={(e) => setSubCategoryName(e.target.value)}
+                  placeholder="Sub-category name (optional)"
+                  className="input-sm w-full"
+                />
               )}
             </div>
           </div>
@@ -1354,6 +1323,8 @@ interface ServicePreviewPanelProps {
   service: Service | null;
   categories?: ServiceCategory[];
   allServices?: Service[];
+  selectedCategoryId?: string | null;
+  onSelectCategory?: (category: ServiceCategory) => void;
   onSelectService?: (service: Service) => void;
   onManagePackages: (service: Service) => void;
   onAssignService: (service: Service) => void;
@@ -1363,6 +1334,8 @@ const ServicePreviewPanel: React.FC<ServicePreviewPanelProps> = ({
   service,
   categories = [],
   allServices = [],
+  selectedCategoryId,
+  onSelectCategory,
   onSelectService,
   onManagePackages,
   onAssignService,
@@ -1376,8 +1349,14 @@ const ServicePreviewPanel: React.FC<ServicePreviewPanelProps> = ({
   const categoriesList = categories && categories.length > 0 ? categories : DEMO_CATEGORIES;
 
   const [selectedCatId, setSelectedCatId] = useState<string>(() => {
-    return service?.categoryId || categoriesList[0]?.id || '';
+    return selectedCategoryId || service?.categoryId || categoriesList[0]?.id || '';
   });
+
+  useEffect(() => {
+    if (selectedCategoryId) {
+      setSelectedCatId(selectedCategoryId);
+    }
+  }, [selectedCategoryId]);
 
   // When external service changes (e.g. user clicked a rectangular bar tile on the left 70%),
   // update internal service and automatically jump to packages view
@@ -1496,7 +1475,10 @@ const ServicePreviewPanel: React.FC<ServicePreviewPanelProps> = ({
                     <button
                       key={cat.id}
                       type="button"
-                      onClick={() => setSelectedCatId(cat.id)}
+                      onClick={() => {
+                        setSelectedCatId(cat.id);
+                        onSelectCategory?.(cat);
+                      }}
                       className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1.5 ${
                         isCatSelected
                           ? 'border-indigo-600 bg-indigo-50/60 ring-2 ring-indigo-500/30 shadow-xs'
@@ -2178,18 +2160,305 @@ const ServicePreviewPanel: React.FC<ServicePreviewPanelProps> = ({
       );
     };
 
+// ─── Add Category Form ───────────────────────────────────────────────────────
+
+interface AddCategoryFormProps {
+  defaultOrder?: number;
+  onSuccess: () => void;
+  onCancel: () => void;
+}
+
+const AddCategoryForm: React.FC<AddCategoryFormProps> = ({ defaultOrder = 0, onSuccess, onCancel }) => {
+  const [name, setName] = useState('');
+  const [displayOrder, setDisplayOrder] = useState<string>(String(defaultOrder));
+  const [isActive, setIsActive] = useState(true);
+  const [iconBase64, setIconBase64] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const generatedSlug = autoSlug(name) || `cat-${Date.now()}`;
+      const payload: any = {
+        name: name.trim(),
+        slug: generatedSlug,
+        displayOrder: parseInt(displayOrder, 10) || 0,
+        isActive,
+      };
+      if (iconBase64) {
+        payload.iconUrl = iconBase64;
+      }
+      const res = await apiClient.post('/admin/categories', payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      onSuccess();
+    },
+    onError: (err: any) => {
+      const msg =
+        err.response?.data?.error?.message ||
+        err.response?.data?.message ||
+        err.message ||
+        'Failed to create category';
+      setError(msg);
+    },
+  });
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        setError(null);
+        if (!name.trim()) {
+          setError('Category name is required');
+          return;
+        }
+        createMutation.mutate();
+      }}
+      className="space-y-4"
+    >
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs font-medium text-red-700">
+          {error}
+        </div>
+      )}
+
+      <IconUpload
+        preview={iconBase64}
+        onChange={(b64) => setIconBase64(b64)}
+        label="Category Icon (PNG / SVG / JPG)"
+        height="h-28"
+      />
+
+      <div>
+        <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
+          Category Name *
+        </label>
+        <input
+          type="text"
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. AC & Appliance Repair, Salon for Women"
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 outline-none"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
+            Display Order
+          </label>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={displayOrder}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, '');
+              setDisplayOrder(digits);
+            }}
+            placeholder="0"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 outline-none"
+          />
+        </div>
+        <div className="flex items-end pb-2">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={isActive}
+              onChange={(e) => setIsActive(e.target.checked)}
+              className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+            />
+            <span className="text-sm font-medium text-gray-700">Active (Visible in App)</span>
+          </label>
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={createMutation.isPending || !name.trim()}
+          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold transition disabled:opacity-60 shadow-sm"
+        >
+          {createMutation.isPending ? 'Creating Category…' : 'Create Category'}
+        </button>
+      </div>
+    </form>
+  );
+};
+
+// ─── Edit Category Form ───────────────────────────────────────────────────────
+
+interface EditCategoryFormProps {
+  category: ServiceCategory;
+  onSuccess: () => void;
+  onCancel: () => void;
+}
+
+const EditCategoryForm: React.FC<EditCategoryFormProps> = ({ category, onSuccess, onCancel }) => {
+  const [name, setName] = useState(category.name);
+  const [displayOrder, setDisplayOrder] = useState<string>(String(category.displayOrder ?? 0));
+  const [isActive, setIsActive] = useState(category.isActive ?? true);
+  const [iconBase64, setIconBase64] = useState<string | null>(null);
+  const [existingIconUrl, setExistingIconUrl] = useState<string | null>(category.iconUrl || null);
+  const [error, setError] = useState<string | null>(null);
+
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      const payload: any = {
+        name: name.trim(),
+        displayOrder: parseInt(displayOrder, 10) || 0,
+        isActive,
+      };
+      if (iconBase64) {
+        payload.iconUrl = iconBase64;
+      }
+      const res = await apiClient.patch(`/admin/categories/${category.id}`, payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      onSuccess();
+    },
+    onError: (err: any) => {
+      const msg =
+        err.response?.data?.error?.message ||
+        err.response?.data?.message ||
+        err.message ||
+        'Failed to update category';
+      setError(msg);
+    },
+  });
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        setError(null);
+        if (!name.trim()) {
+          setError('Category name is required');
+          return;
+        }
+        updateMutation.mutate();
+      }}
+      className="space-y-4"
+    >
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs font-medium text-red-700">
+          {error}
+        </div>
+      )}
+
+      <IconUpload
+        preview={iconBase64 || existingIconUrl}
+        onChange={(b64) => {
+          setIconBase64(b64);
+          if (!b64) setExistingIconUrl(null);
+        }}
+        label="Category Icon (PNG / SVG / JPG)"
+        height="h-28"
+      />
+
+      <div>
+        <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
+          Category Name *
+        </label>
+        <input
+          type="text"
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. AC & Appliance Repair, Salon for Women"
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 outline-none"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
+            Display Order
+          </label>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={displayOrder}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, '');
+              setDisplayOrder(digits);
+            }}
+            placeholder="0"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 outline-none"
+          />
+        </div>
+        <div className="flex items-end pb-2">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={isActive}
+              onChange={(e) => setIsActive(e.target.checked)}
+              className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+            />
+            <span className="text-sm font-medium text-gray-700">Active (Visible in App)</span>
+          </label>
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={updateMutation.isPending || !name.trim()}
+          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold transition disabled:opacity-60 shadow-sm"
+        >
+          {updateMutation.isPending ? 'Saving…' : 'Save Changes'}
+        </button>
+      </div>
+    </form>
+  );
+};
+
 // ─── Main Services Page ───────────────────────────────────────────────────────
 
 export const Services: React.FC = () => {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<'categories' | 'services'>('categories');
+  const [categorySearch, setCategorySearch] = useState('');
+  const [categoryStatusFilter, setCategoryStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [editingCategory, setEditingCategory] = useState<ServiceCategory | null>(null);
+  const [deletingCategory, setDeletingCategory] = useState<ServiceCategory | null>(null);
+
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [page, setPage] = useState(1);
 
-  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
+  const [addServiceCategory, setAddServiceCategory] = useState<ServiceCategory | null>(null);
   const [packagesService, setPackagesService] = useState<Service | null>(null);
   const [archivingService, setArchivingService] = useState<Service | null>(null);
   const [previewServiceId, setPreviewServiceId] = useState<string | null>(null);
+
+  const deleteCategoryMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      await apiClient.delete(`/admin/categories/${id}`, { data: { reason } });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      setDeletingCategory(null);
+    },
+  });
 
   // Assign to vendor modal
   const [isAssignOpen, setIsAssignOpen] = useState(false);
@@ -2273,6 +2542,18 @@ export const Services: React.FC = () => {
   const services: Service[] = data?.data ?? [];
   const pagination = data?.pagination;
 
+  const filteredCategories = categories.filter((c) => {
+    const q = categorySearch.toLowerCase().trim();
+    const matchSearch = !q || c.name.toLowerCase().includes(q) || c.slug.toLowerCase().includes(q);
+    const matchStatus =
+      categoryStatusFilter === 'all'
+        ? true
+        : categoryStatusFilter === 'active'
+        ? c.isActive
+        : !c.isActive;
+    return matchSearch && matchStatus;
+  });
+
   const selectedPreviewService =
     services.find((s) => s.id === previewServiceId) || services[0] || null;
 
@@ -2294,200 +2575,359 @@ export const Services: React.FC = () => {
             <UserCheck className="w-4 h-4" /> Assign to Partner
           </button>
           <button
-            onClick={() => setIsAddOpen(true)}
+            onClick={() => setIsAddCategoryOpen(true)}
             className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold transition shadow-sm"
           >
-            <Plus className="w-4 h-4" /> Add Service
+            <Plus className="w-4 h-4" /> Add Category
           </button>
         </div>
       </div>
 
       {/* 70% / 30% Split Layout */}
       <div className="flex flex-col lg:flex-row gap-6 items-start">
-        {/* ── 70% Left Section: Services List as Horizontal Rectangular Bars ── */}
+        {/* ── 70% Left Section: Categories & Services ── */}
         <div className="w-full lg:w-[70%] space-y-4">
-          {/* Filters Bar */}
-          <div className="bg-white rounded-xl border border-gray-200 p-3.5 shadow-xs flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                placeholder="Search services by name or description…"
-                className="w-full pl-9 pr-4 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-            <select
-              value={categoryFilter}
-              onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}
-              className="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 focus:outline-none focus:border-indigo-500"
+          {/* Top Tabs: Categories vs Services */}
+          <div className="flex items-center gap-2 border-b border-gray-200 pb-2">
+            <button
+              onClick={() => setActiveTab('categories')}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
+                activeTab === 'categories'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+              }`}
             >
-              <option value="">All Categories</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+              <FolderTree className="w-4 h-4" />
+              Categories ({categories.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('services')}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
+                activeTab === 'services'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+              }`}
+            >
+              <Package className="w-4 h-4" />
+              Services ({services.length})
+            </button>
           </div>
 
-          {/* Service Rectangular Tiles (Bar Style) */}
-          {isLoading ? (
-            <div className="py-16 text-center text-gray-400 bg-white rounded-2xl border border-gray-200">
-              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-indigo-500" />
-              Loading service catalog…
-            </div>
-          ) : services.length === 0 ? (
-            <div className="py-16 text-center bg-white rounded-2xl border border-gray-200">
-              <Package className="w-12 h-12 mx-auto mb-3 text-gray-200" />
-              <p className="text-gray-500 font-medium">No services found</p>
-              <p className="text-sm text-gray-400 mt-1">Add your first service to get started</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {services.map((service) => {
-                const isSelected = selectedPreviewService?.id === service.id;
-                const thumbSrc = service.bannerImages?.[0] || service.imageUrl || service.iconUrl;
-                const packageCount = service.packages?.length || 0;
+          {activeTab === 'categories' ? (
+            <>
+              {/* Category Search & Filter */}
+              <div className="bg-white rounded-xl border border-gray-200 p-3.5 shadow-xs flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={categorySearch}
+                    onChange={(e) => setCategorySearch(e.target.value)}
+                    placeholder="Search categories by name or slug…"
+                    className="w-full pl-9 pr-4 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <select
+                  value={categoryStatusFilter}
+                  onChange={(e) => setCategoryStatusFilter(e.target.value as any)}
+                  className="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="all">All Status</option>
+                  <option value="active">Active Only</option>
+                  <option value="inactive">Inactive Only</option>
+                </select>
+              </div>
 
-                return (
-                  <div
-                    key={service.id}
-                    onClick={() => setPreviewServiceId(service.id)}
-                    className={`group bg-white rounded-2xl border p-3.5 transition-all cursor-pointer flex flex-col sm:flex-row items-start sm:items-center gap-4 ${
-                      isSelected
-                        ? 'border-indigo-600 bg-indigo-50/20 ring-2 ring-indigo-500/20 shadow-xs'
-                        : 'border-gray-200/90 hover:border-indigo-300 hover:shadow-xs'
-                    }`}
-                  >
-                    {/* Rectangular Bar Thumbnail */}
-                    <div className="w-full sm:w-36 h-24 rounded-xl overflow-hidden shrink-0 bg-slate-100 border border-slate-200/80 relative flex items-center justify-center">
-                      {thumbSrc ? (
-                        <img src={thumbSrc} alt={service.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-500 flex items-center justify-center">
-                          <Sparkles className="w-6 h-6" />
-                        </div>
-                      )}
-                      {service.bannerVideo && (
-                        <span className="absolute bottom-1.5 left-1.5 bg-black/70 backdrop-blur-xs text-white p-1 rounded-md text-[10px] flex items-center gap-1 shadow-xs">
-                          <Video className="w-3 h-3 text-emerald-400" />
-                        </span>
-                      )}
-                      {service.bannerImages && service.bannerImages.length > 1 && (
-                        <span className="absolute top-1.5 right-1.5 bg-black/70 backdrop-blur-xs text-white px-1.5 py-0.5 rounded text-[10px] font-semibold">
-                          +{service.bannerImages.length}
-                        </span>
-                      )}
-                    </div>
+              {/* Categories Rectangular Bar List */}
+              {categories.length === 0 ? (
+                <div className="py-16 text-center bg-white rounded-2xl border border-gray-200">
+                  <FolderTree className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p className="text-gray-500 font-medium">No categories created yet</p>
+                  <p className="text-sm text-gray-400 mt-1">Click "+ Add Category" above to create your first category</p>
+                </div>
+              ) : filteredCategories.length === 0 ? (
+                <div className="py-16 text-center bg-white rounded-2xl border border-gray-200">
+                  <Search className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+                  <p className="text-gray-500 font-medium">No matching categories found</p>
+                  <p className="text-sm text-gray-400 mt-1">Try adjusting your search or status filter</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredCategories.map((category) => {
+                    const isSelected = selectedCategoryId === category.id;
+                    const subCatCount = category.subCategories?.length || 0;
+                    const categoryServices = allServicesData.filter((s: any) => s.categoryId === category.id);
 
-                    {/* Content Details */}
-                    <div className="flex-1 min-w-0 space-y-1">
-                      {/* Badges */}
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                          {service.category?.name ?? 'General'}
-                        </span>
-                        {service.subCategory && (
-                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">
-                            {service.subCategory.name}
-                          </span>
-                        )}
-                        {service.isPopular && (
-                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                            ★ Popular
-                          </span>
-                        )}
-                        {isSelected && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-600 text-white ml-auto sm:ml-0">
-                            Viewing in Preview →
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Title & Description */}
-                      <h3 className="font-bold text-base text-gray-900 truncate group-hover:text-indigo-600 transition-colors">
-                        {service.name}
-                      </h3>
-                      <p className="text-xs text-gray-500 line-clamp-1 leading-relaxed">
-                        {service.description}
-                      </p>
-
-                      {/* Metrics bar */}
-                      <div className="flex items-center gap-4 pt-1 text-xs text-gray-600">
-                        <span className="font-bold text-gray-900">
-                          {Number(service.startingPrice) > 0 ? (
-                            <>₹{Number(service.startingPrice)} <span className="text-[10px] text-gray-400 font-normal">/ {service.priceUnit}</span></>
-                          ) : (
-                            <span className="text-indigo-600 font-semibold">{packageCount} Packages</span>
-                          )}
-                        </span>
-                        <span className="flex items-center gap-1 text-gray-400">
-                          <Clock className="w-3.5 h-3.5" /> {service.durationText}
-                        </span>
-                        <span className="flex items-center gap-1 text-amber-600 font-bold">
-                          <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" /> {service.rating}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div
-                      className="flex sm:flex-col items-center gap-1.5 shrink-0 self-stretch sm:self-center justify-between sm:justify-center border-t sm:border-t-0 sm:border-l border-gray-100 pt-2 sm:pt-0 sm:pl-3 w-full sm:w-auto"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <button
-                        onClick={() => setPackagesService(service)}
-                        className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition"
-                        title="Manage Packages"
+                    return (
+                      <div
+                        key={category.id}
+                        className={`group bg-white rounded-2xl border transition-all overflow-hidden ${
+                          isSelected
+                            ? 'border-indigo-600 ring-2 ring-indigo-500/20 shadow-xs'
+                            : 'border-gray-200/90 hover:border-indigo-300 hover:shadow-xs'
+                        }`}
                       >
-                        <Package className="w-3.5 h-3.5" />
-                        <span>Packages ({packageCount})</span>
-                      </button>
-                      <div className="flex items-center gap-1.5 w-full justify-end">
-                        <button
-                          onClick={() => { setAssignServiceId(service.id); setIsAssignOpen(true); }}
-                          className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition"
-                          title="Assign to Partner"
+                        <div
+                          onClick={() => {
+                            setSelectedCategoryId(category.id);
+                            navigate(`/our-app/services/${category.id}`);
+                          }}
+                          className="p-4 cursor-pointer flex flex-col sm:flex-row items-start sm:items-center gap-4 hover:bg-slate-50/50 transition-colors"
                         >
-                          <UserCheck className="w-3.5 h-3.5" />
-                          <span>Assign</span>
-                        </button>
-                        <button
-                          onClick={() => setArchivingService(service)}
-                          className="p-1.5 rounded-lg text-rose-500 bg-rose-50 hover:bg-rose-100 transition"
-                          title="Archive Service"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                          {/* Icon / Avatar */}
+                          <div className="w-16 h-16 rounded-2xl overflow-hidden shrink-0 bg-slate-100 border border-slate-200/80 relative flex items-center justify-center p-1.5">
+                            {category.iconUrl ? (
+                              <img src={category.iconUrl} alt={category.name} className="w-full h-full object-cover rounded-xl" />
+                            ) : (
+                              <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-500 flex items-center justify-center">
+                                <FolderOpen className="w-6 h-6" />
+                              </div>
+                            )}
+                          </div>
 
-          {/* Pagination */}
-          {pagination && pagination.totalPages > 1 && (
-            <div className="flex items-center justify-center gap-3 pt-2">
-              <button
-                disabled={page === 1}
-                onClick={() => setPage(page - 1)}
-                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 hover:bg-gray-50"
-              >
-                Previous
-              </button>
-              <span className="text-sm text-gray-500">
-                Page {page} of {pagination.totalPages}
-              </span>
-              <button
-                disabled={page === pagination.totalPages}
-                onClick={() => setPage(page + 1)}
-                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 hover:bg-gray-50"
-              >
-                Next
-              </button>
-            </div>
+                          {/* Details */}
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="font-bold text-base text-gray-900 group-hover:text-indigo-600 transition-colors">
+                                {category.name}
+                              </h3>
+                              {categoryServices.length > 0 && (
+                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                                  {categoryServices.length} {categoryServices.length === 1 ? 'service' : 'services'}
+                                </span>
+                              )}
+                            </div>
+
+                            {category.description && (
+                              <p className="text-xs text-gray-500 line-clamp-1">{category.description}</p>
+                            )}
+
+                            {subCatCount > 0 && (
+                              <div className="flex items-center gap-4 pt-1 text-xs text-gray-500">
+                                <span className="inline-flex items-center gap-1">
+                                  <Layers className="w-3.5 h-3.5 text-indigo-500" />
+                                  {subCatCount} Sub-categories
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Actions */}
+                          <div
+                            className="flex items-center gap-2 shrink-0 self-end sm:self-center border-t sm:border-t-0 sm:border-l border-gray-100 pt-2 sm:pt-0 sm:pl-3"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              onClick={() => setEditingCategory(category)}
+                              className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                              title="Edit Category"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedCategoryId(category.id);
+                                navigate(`/our-app/services/${category.id}`);
+                              }}
+                              className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition flex items-center gap-1"
+                              title="Open Category"
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Filters Bar */}
+              <div className="bg-white rounded-xl border border-gray-200 p-3.5 shadow-xs flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                    placeholder="Search services by name or description…"
+                    className="w-full pl-9 pr-4 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}
+                  className="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="">All Categories</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Service Rectangular Tiles (Bar Style) */}
+              {isLoading ? (
+                <div className="py-16 text-center text-gray-400 bg-white rounded-2xl border border-gray-200">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-indigo-500" />
+                  Loading service catalog…
+                </div>
+              ) : services.length === 0 ? (
+                <div className="py-16 text-center bg-white rounded-2xl border border-gray-200">
+                  <Package className="w-12 h-12 mx-auto mb-3 text-gray-200" />
+                  <p className="text-gray-500 font-medium">No services found</p>
+                  <p className="text-sm text-gray-400 mt-1">Select a category or add a new category to organize catalog items</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {services.map((service) => {
+                    const isSelected = selectedPreviewService?.id === service.id;
+                    const thumbSrc = service.bannerImages?.[0] || service.imageUrl || service.iconUrl;
+                    const packageCount = service.packages?.length || 0;
+
+                    return (
+                      <div
+                        key={service.id}
+                        onClick={() => setPreviewServiceId(service.id)}
+                        className={`group bg-white rounded-2xl border p-3.5 transition-all cursor-pointer flex flex-col sm:flex-row items-start sm:items-center gap-4 ${
+                          isSelected
+                            ? 'border-indigo-600 bg-indigo-50/20 ring-2 ring-indigo-500/20 shadow-xs'
+                            : 'border-gray-200/90 hover:border-indigo-300 hover:shadow-xs'
+                        }`}
+                      >
+                        {/* Rectangular Bar Thumbnail */}
+                        <div className="w-full sm:w-36 h-24 rounded-xl overflow-hidden shrink-0 bg-slate-100 border border-slate-200/80 relative flex items-center justify-center">
+                          {thumbSrc ? (
+                            <img src={thumbSrc} alt={service.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-500 flex items-center justify-center">
+                              <Sparkles className="w-6 h-6" />
+                            </div>
+                          )}
+                          {service.bannerVideo && (
+                            <span className="absolute bottom-1.5 left-1.5 bg-black/70 backdrop-blur-xs text-white p-1 rounded-md text-[10px] flex items-center gap-1 shadow-xs">
+                              <Video className="w-3 h-3 text-emerald-400" />
+                            </span>
+                          )}
+                          {service.bannerImages && service.bannerImages.length > 1 && (
+                            <span className="absolute top-1.5 right-1.5 bg-black/70 backdrop-blur-xs text-white px-1.5 py-0.5 rounded text-[10px] font-semibold">
+                              +{service.bannerImages.length}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Content Details */}
+                        <div className="flex-1 min-w-0 space-y-1">
+                          {/* Badges */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                              {service.category?.name ?? 'General'}
+                            </span>
+                            {service.subCategory && (
+                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">
+                                {service.subCategory.name}
+                              </span>
+                            )}
+                            {service.isPopular && (
+                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                                ★ Popular
+                              </span>
+                            )}
+                            {isSelected && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-600 text-white ml-auto sm:ml-0">
+                                Viewing in Preview →
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Title & Description */}
+                          <h3 className="font-bold text-base text-gray-900 truncate group-hover:text-indigo-600 transition-colors">
+                            {service.name}
+                          </h3>
+                          <p className="text-xs text-gray-500 line-clamp-1 leading-relaxed">
+                            {service.description}
+                          </p>
+
+                          {/* Metrics bar */}
+                          <div className="flex items-center gap-4 pt-1 text-xs text-gray-600">
+                            <span className="font-bold text-gray-900">
+                              {Number(service.startingPrice) > 0 ? (
+                                <>₹{Number(service.startingPrice)} <span className="text-[10px] text-gray-400 font-normal">/ {service.priceUnit}</span></>
+                              ) : (
+                                <span className="text-indigo-600 font-semibold">{packageCount} Packages</span>
+                              )}
+                            </span>
+                            <span className="flex items-center gap-1 text-gray-400">
+                              <Clock className="w-3.5 h-3.5" /> {service.durationText}
+                            </span>
+                            <span className="flex items-center gap-1 text-amber-600 font-bold">
+                              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" /> {service.rating}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div
+                          className="flex sm:flex-col items-center gap-1.5 shrink-0 self-stretch sm:self-center justify-between sm:justify-center border-t sm:border-t-0 sm:border-l border-gray-100 pt-2 sm:pt-0 sm:pl-3 w-full sm:w-auto"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            onClick={() => setPackagesService(service)}
+                            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition"
+                            title="Manage Packages"
+                          >
+                            <Package className="w-3.5 h-3.5" />
+                            <span>Packages ({packageCount})</span>
+                          </button>
+                          <div className="flex items-center gap-1.5 w-full justify-end">
+                            <button
+                              onClick={() => { setAssignServiceId(service.id); setIsAssignOpen(true); }}
+                              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition"
+                              title="Assign to Partner"
+                            >
+                              <UserCheck className="w-3.5 h-3.5" />
+                              <span>Assign</span>
+                            </button>
+                            <button
+                              onClick={() => setArchivingService(service)}
+                              className="p-1.5 rounded-lg text-rose-500 bg-rose-50 hover:bg-rose-100 transition"
+                              title="Archive Service"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Pagination */}
+              {pagination && pagination.totalPages > 1 && (
+                <div className="flex items-center justify-center gap-3 pt-2">
+                  <button
+                    disabled={page === 1}
+                    onClick={() => setPage(page - 1)}
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 hover:bg-gray-50"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-gray-500">
+                    Page {page} of {pagination.totalPages}
+                  </span>
+                  <button
+                    disabled={page === pagination.totalPages}
+                    onClick={() => setPage(page + 1)}
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 hover:bg-gray-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -2497,6 +2937,8 @@ export const Services: React.FC = () => {
             service={selectedPreviewService}
             categories={categories}
             allServices={allServicesData}
+            selectedCategoryId={selectedCategoryId}
+            onSelectCategory={(cat) => setSelectedCategoryId(cat.id)}
             onSelectService={(s) => setPreviewServiceId(s.id)}
             onManagePackages={(s) => setPackagesService(s)}
             onAssignService={(s) => { setAssignServiceId(s.id); setIsAssignOpen(true); }}
@@ -2504,18 +2946,81 @@ export const Services: React.FC = () => {
         </div>
       </div>
 
-      {/* Add Service Modal */}
-      <Modal isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} title="Add New Service" maxWidth="lg">
-        <AddServiceForm
-          categories={categories}
+      {/* Add Category Modal */}
+      <Modal
+        isOpen={isAddCategoryOpen}
+        onClose={() => setIsAddCategoryOpen(false)}
+        title="Add New Category"
+        maxWidth="md"
+      >
+        <AddCategoryForm
+          defaultOrder={categories.length}
           onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['categories'] });
             queryClient.invalidateQueries({ queryKey: ['services'] });
             queryClient.invalidateQueries({ queryKey: ['all-catalog-services-list'] });
-            setIsAddOpen(false);
+            setIsAddCategoryOpen(false);
           }}
-          onCancel={() => setIsAddOpen(false)}
+          onCancel={() => setIsAddCategoryOpen(false)}
         />
       </Modal>
+
+      {/* Add Service Modal */}
+      <Modal
+        isOpen={!!addServiceCategory}
+        onClose={() => setAddServiceCategory(null)}
+        title={addServiceCategory ? `Add Service to ${addServiceCategory.name}` : 'Add New Service'}
+        maxWidth="lg"
+      >
+        {addServiceCategory && (
+          <AddServiceForm
+            categories={categories}
+            initialCategory={addServiceCategory}
+            onSuccess={() => {
+              queryClient.invalidateQueries({ queryKey: ['services'] });
+              queryClient.invalidateQueries({ queryKey: ['categories'] });
+              queryClient.invalidateQueries({ queryKey: ['all-catalog-services-list'] });
+              setAddServiceCategory(null);
+            }}
+            onCancel={() => setAddServiceCategory(null)}
+          />
+        )}
+      </Modal>
+
+      {/* Edit Category Modal */}
+      <Modal
+        isOpen={!!editingCategory}
+        onClose={() => setEditingCategory(null)}
+        title={editingCategory ? `Edit: ${editingCategory.name}` : 'Edit Category'}
+        maxWidth="md"
+      >
+        {editingCategory && (
+          <EditCategoryForm
+            category={editingCategory}
+            onSuccess={() => {
+              queryClient.invalidateQueries({ queryKey: ['categories'] });
+              setEditingCategory(null);
+            }}
+            onCancel={() => setEditingCategory(null)}
+          />
+        )}
+      </Modal>
+
+      {/* Archive Category Confirm */}
+      <ConfirmModal
+        isOpen={!!deletingCategory}
+        onClose={() => setDeletingCategory(null)}
+        onConfirm={(reason) => {
+          if (deletingCategory) {
+            deleteCategoryMutation.mutate({ id: deletingCategory.id, reason: reason || 'Archived by Admin' });
+          }
+        }}
+        title="Archive Category"
+        message={`Archive "${deletingCategory?.name}"? This hides it from the customer app.`}
+        confirmText="Archive Category"
+        requireReason={false}
+        danger
+      />
 
       {/* Package Manager Modal */}
       <Modal
@@ -2534,12 +3039,12 @@ export const Services: React.FC = () => {
         isOpen={!!archivingService}
         onClose={() => setArchivingService(null)}
         onConfirm={(reason) => {
-          if (archivingService) archiveMutation.mutate({ id: archivingService.id, reason });
+          if (archivingService) archiveMutation.mutate({ id: archivingService.id, reason: reason || 'Archived by Admin' });
         }}
         title="Archive Service"
         message={`Archive "${archivingService?.name}"? It will be hidden from the customer app.`}
         confirmText="Archive Service"
-        requireReason
+        requireReason={false}
         danger
       />
 

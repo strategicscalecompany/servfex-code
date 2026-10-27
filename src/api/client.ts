@@ -2,15 +2,15 @@ import axios from 'axios';
 import { auth } from '../config/firebase';
 
 const rawApiUrl = (import.meta.env.VITE_API_URL || 'https://api.servfex.com/api/v1').trim();
-const normalizedBaseURL = rawApiUrl.endsWith('/api/v1')
+const apiBaseURL = rawApiUrl.endsWith('/api/v1')
   ? rawApiUrl
   : `${rawApiUrl.replace(/\/+$/, '')}/api/v1`;
 
 export const apiClient = axios.create({
-  baseURL: normalizedBaseURL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  baseURL: apiBaseURL,
+  timeout: 15 * 60 * 1000,
+  maxBodyLength: Infinity,
+  maxContentLength: Infinity,
 });
 
 // Request interceptor to attach Firebase ID token if user is authenticated
@@ -38,7 +38,16 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest?._retry && auth.currentUser) {
+    const errorCode = error.response?.data?.error?.code as string | undefined;
+    const retryableAuth =
+      !errorCode || errorCode === 'TOKEN_EXPIRED' || errorCode === 'UNAUTHORIZED';
+
+    if (
+      error.response?.status === 401 &&
+      retryableAuth &&
+      !originalRequest?._retry &&
+      auth.currentUser
+    ) {
       originalRequest._retry = true;
 
       try {

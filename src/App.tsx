@@ -21,6 +21,7 @@ import { AppHome } from './pages/our-app/AppHome';
 import { SupportInbox } from './pages/support/SupportInbox';
 import { Warehouse } from './pages/warehouse/Warehouse';
 import { Services } from './pages/services/Services';
+import { CategoryDetailPage } from './pages/services/CategoryDetailPage';
 import { Categories } from './pages/categories/Categories';
 import { Payments } from './pages/payments/Payments';
 import { Reviews } from './pages/reviews/Reviews';
@@ -87,21 +88,26 @@ export const App: React.FC = () => {
                 <Route path="vendors" element={<Navigate to="/partner-onboarding" replace />} />
                 <Route path="vendors/:id" element={<VendorDetail />} />
                 
-                {/* Employees Dropdown Sub-pages */}
-                <Route path="employees" element={<Navigate to="/employees/white-collars" replace />} />
+                {/* White Collars Dropdown Sub-pages */}
+                <Route path="employees" element={<Navigate to="/employees/operation-managers" replace />} />
                 <Route path="employees/technicians" element={<Employees />} />
-                <Route path="employees/white-collars" element={<WhiteCollars />} />
+                <Route path="employees/white-collars" element={<Navigate to="/employees/operation-managers" replace />} />
                 <Route path="employees/operation-managers" element={<OperationManagers />} />
                 <Route path="employees/development-managers" element={<DevelopmentManagers />} />
+                <Route path="white-collars" element={<Navigate to="/employees/operation-managers" replace />} />
+                <Route path="white-collars/operation-managers" element={<Navigate to="/employees/operation-managers" replace />} />
+                <Route path="white-collars/development-managers" element={<Navigate to="/employees/development-managers" replace />} />
 
                 {/* Our App Dropdown Sub-pages */}
                 <Route path="our-app" element={<Navigate to="/our-app/home" replace />} />
                 <Route path="our-app/home" element={<AppHome />} />
                 <Route path="our-app/services" element={<Services />} />
+                <Route path="our-app/services/:categoryId" element={<CategoryDetailPage />} />
                 <Route path="our-app/telemetry" element={<OurApp />} />
                 
                 {/* Legacy route redirects */}
                 <Route path="services" element={<Navigate to="/our-app/services" replace />} />
+                <Route path="services/:categoryId" element={<Navigate to="/our-app/services/:categoryId" replace />} />
 
                 {/* Support & Warehouse */}
                 <Route path="support-inbox" element={<SupportInbox />} />

@@ -393,9 +393,9 @@ export const OurApp: React.FC = () => {
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-slate-900 font-bold text-xs">
                 <QrCode className="w-4 h-4 text-emerald-600" />
-                <span>QR Challenge Verification</span>
+                <span>Start OTP Verification</span>
               </div>
-              <p className="text-[11px] text-slate-500">Require single-use QR scan on customer device to finish</p>
+              <p className="text-[11px] text-slate-500">Require the expert to enter the customer 4-digit OTP before work starts</p>
             </div>
             <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-200">
               <span className="text-[11px] font-semibold text-slate-600">

@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { loadGoogleMaps } from '../../utils/googleMapsLoader';
 import { apiClient } from '../../api/client';
+import { hostMediaIfNeeded } from '../../api/upload';
 import { VendorProfile } from '../../types';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Modal } from '../../components/common/Modal';
@@ -52,7 +53,6 @@ interface UploadedDocItem {
 
 const MAX_ONBOARDING_DOCS = 30;
 const MAX_ONBOARDING_TOTAL_BYTES = 500 * 1024 * 1024;
-const UPLOAD_TIMEOUT_MS = 15 * 60 * 1000;
 
 const formatBytes = (bytes: number): string => {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -61,12 +61,7 @@ const formatBytes = (bytes: number): string => {
 };
 
 const uploadMediaToCloud = async (dataUrl: string, folder: string): Promise<string> => {
-  const res = await apiClient.post(
-    '/admin/upload',
-    { image: dataUrl, folder },
-    { timeout: UPLOAD_TIMEOUT_MS }
-  );
-  const url = res.data?.data?.url as string | undefined;
+  const url = await hostMediaIfNeeded(dataUrl, folder);
   if (!url) {
     throw new Error('Upload did not return a hosted file URL');
   }
@@ -284,7 +279,7 @@ export const Vendors: React.FC = () => {
     longitude: null as number | null,
     businessLicense: '',
     taxId: '',
-    commissionRate: 15,
+    commissionRate: 0,
   });
 
   const [googleMapsUrl, setGoogleMapsUrl] = useState('');
@@ -465,6 +460,7 @@ export const Vendors: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vendors'] });
+      queryClient.invalidateQueries({ queryKey: ['warehouse-map-vendors'] });
       setIsApproveOpen(false);
       setIsDetailOpen(false);
     },
@@ -476,6 +472,7 @@ export const Vendors: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vendors'] });
+      queryClient.invalidateQueries({ queryKey: ['warehouse-map-vendors'] });
       setIsRejectOpen(false);
       setIsDetailOpen(false);
     },
@@ -487,6 +484,7 @@ export const Vendors: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vendors'] });
+      queryClient.invalidateQueries({ queryKey: ['warehouse-map-vendors'] });
       setIsSuspendOpen(false);
       setIsDetailOpen(false);
     },
@@ -498,6 +496,7 @@ export const Vendors: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vendors'] });
+      queryClient.invalidateQueries({ queryKey: ['warehouse-map-vendors'] });
       setIsDetailOpen(false);
     },
   });
@@ -508,6 +507,7 @@ export const Vendors: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vendors'] });
+      queryClient.invalidateQueries({ queryKey: ['warehouse-map-vendors'] });
       setIsDeleteOpen(false);
       setVendorToDelete(null);
     },
@@ -519,6 +519,7 @@ export const Vendors: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vendors'] });
+      queryClient.invalidateQueries({ queryKey: ['warehouse-map-vendors'] });
       setIsCreateOpen(false);
       setFormData({
         companyName: '',
@@ -536,7 +537,7 @@ export const Vendors: React.FC = () => {
         longitude: null,
         businessLicense: '',
         taxId: '',
-        commissionRate: 15,
+        commissionRate: 0,
       });
       setGoogleMapsUrl('');
       setPinpointedCoords(null);
@@ -749,7 +750,6 @@ export const Vendors: React.FC = () => {
 
               <div className="p-3.5 rounded-xl border border-slate-200 space-y-1">
                 <span className="text-slate-400 font-bold uppercase block">Platform Terms</span>
-                <p className="text-slate-700">Commission Rate: <span className="font-semibold text-indigo-600">{Number(selectedVendor.commissionRate)}%</span></p>
                 <p className="text-slate-700">Status: <span className="font-semibold text-slate-900">{selectedVendor.isActive ? 'Active' : 'Suspended'}</span></p>
               </div>
             </div>
@@ -1140,7 +1140,11 @@ export const Vendors: React.FC = () => {
                       type="text"
                       placeholder="Paste link e.g. https://maps.app.goo.gl/... or coordinates"
                       value={googleMapsUrl}
-                      onChange={(e) => setGoogleMapsUrl(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const match = val.match(/https?:\/\/[^\s"'<>]+/i);
+                        setGoogleMapsUrl(match ? match[0] : val);
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();

@@ -36,13 +36,19 @@ export const AdminLayout: React.FC = () => {
   const navigate = useNavigate();
   const { newBooking, dismissNewBooking } = useBookingRealtime();
 
-  // Keep Employees dropdown open if user is browsing any employees sub-page
-  const isEmployeePath = location.pathname.startsWith('/employees');
+  // Keep White Collars dropdown open if user is browsing any employees/white-collars sub-page
+  const isEmployeePath = location.pathname.startsWith('/employees') || location.pathname.startsWith('/white-collars');
   const [isEmployeesOpen, setIsEmployeesOpen] = useState(true);
 
   // Keep Our App dropdown open if user is browsing any our-app sub-page
   const isOurAppPath = location.pathname.startsWith('/our-app');
   const [isOurAppOpen, setIsOurAppOpen] = useState(true);
+
+  // Full-bleed edge-to-edge layout for Warehouse Map
+  const isWarehousePath = location.pathname.startsWith('/warehouse');
+  const isCategoryDetailPage =
+    (location.pathname.startsWith('/our-app/services/') && location.pathname !== '/our-app/services') ||
+    (location.pathname.startsWith('/services/') && location.pathname !== '/services');
 
   useEffect(() => {
     if (isEmployeePath) {
@@ -63,8 +69,7 @@ export const AdminLayout: React.FC = () => {
   ];
 
   const employeeSubLinks = [
-    { name: 'White Collars', path: '/employees/white-collars', icon: Briefcase },
-    { name: 'Operation Managers', path: '/employees/operation-managers', icon: Compass },
+    { name: 'Hub Operation Managers', path: '/employees/operation-managers', icon: Compass },
     { name: 'Development Managers', path: '/employees/development-managers', icon: Code2 },
   ];
 
@@ -172,7 +177,7 @@ export const AdminLayout: React.FC = () => {
                 <NavItem key={link.path} item={link} />
               ))}
 
-              {/* Employees Dropdown Section */}
+              {/* White Collars Dropdown Section */}
               <div className="pt-1">
                 <button
                   type="button"
@@ -185,8 +190,8 @@ export const AdminLayout: React.FC = () => {
                   )}
                 >
                   <div className="flex items-center gap-3">
-                    <Users className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-indigo-400" />
-                    <span>Employees</span>
+                    <Briefcase className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-indigo-400" />
+                    <span>White Collars</span>
                   </div>
                   {isEmployeesOpen ? (
                     <ChevronDown className="w-4 h-4 text-slate-400" />
@@ -342,8 +347,17 @@ export const AdminLayout: React.FC = () => {
         </header>
 
         {/* Dynamic Route Content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
-          {newBooking && location.pathname !== '/bookings' && (
+        <main
+          className={clsx(
+            'flex-1',
+            isWarehousePath
+              ? 'p-0 w-full max-w-none h-[calc(100vh-3.5rem)] lg:h-screen overflow-hidden relative'
+              : isCategoryDetailPage
+              ? 'p-4 sm:p-6 w-full max-w-none flex flex-col min-h-[calc(100vh-3.5rem)]'
+              : 'p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto'
+          )}
+        >
+          {newBooking && location.pathname !== '/bookings' && !isWarehousePath && (
             <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-800 shadow-xs animate-in fade-in duration-300">
               <div className="flex items-center gap-2.5">
                 <span className="relative flex h-2.5 w-2.5 shrink-0">
