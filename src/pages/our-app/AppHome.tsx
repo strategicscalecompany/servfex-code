@@ -1,3 +1,5 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../../api/client';
 import React, { useState, useEffect } from 'react';
 import {
   Home,
@@ -23,17 +25,39 @@ import {
   Bug,
   Hammer,
   Refrigerator,
+  ShoppingCart,
   Plus,
   Trash2,
+  ArrowUp,
+  ArrowDown,
   Smartphone,
   Eye,
+  EyeOff,
   Sliders,
   Check,
+  Pencil,
   RotateCw,
   Layers,
   ArrowRight,
 } from 'lucide-react';
 import { Modal } from '../../components/common/Modal';
+
+
+interface HomePreviewCategory {
+  id: string;
+  name: string;
+  icon: any;
+}
+
+interface HomePreviewService {
+  id: string;
+  name: string;
+  rating: number;
+  reviewCount: number;
+  durationText: string;
+  startingPrice: number;
+  icon: any;
+}
 
 // ─── Promo Slide Interface ───────────────────────────────────────────────────
 interface PromoSlideItem {
@@ -55,6 +79,36 @@ interface SectionConfig {
   enabled: boolean;
 }
 
+interface HomeServiceSection {
+  id: string;
+  title: string;
+  subtitle: string;
+  serviceIds: string[];
+  enabled: boolean;
+}
+
+const DEFAULT_SERVICE_SECTIONS: HomeServiceSection[] = [];
+
+const isBlankOrDefaultSectionTitle = (title: string): boolean => {
+  const normalized = title.trim().toLowerCase();
+  return (
+    normalized.length === 0 ||
+    normalized === 'popular services' ||
+    normalized === 'services' ||
+    /^service section\s*\d+$/.test(normalized)
+  );
+};
+
+const mapHomeServiceSection = (section: any, index: number): HomeServiceSection => ({
+  id: typeof section?.id === 'string' && section.id ? section.id : `HS-${index + 1}`,
+  title: typeof section?.title === 'string' ? section.title : '',
+  subtitle: typeof section?.subtitle === 'string' ? section.subtitle : '',
+  serviceIds: Array.isArray(section?.serviceIds)
+    ? section.serviceIds.filter((id: unknown) => typeof id === 'string')
+    : [],
+  enabled: section?.enabled !== false,
+});
+
 // Cycling search hints from Android ServFexSearchBar.kt
 const SEARCH_HINTS = [
   'Sofa Cleaning',
@@ -68,11 +122,56 @@ const SEARCH_HINTS = [
 ];
 
 export const AppHome: React.FC = () => {
+  const queryClient = useQueryClient();
+
+  // ── Real Dynamic Queries from Backend ──
+  const { data: homeLayoutData, isLoading: isLayoutLoading } = useQuery({
+    queryKey: ['home-layout'],
+    queryFn: async () => {
+      const res = await apiClient.get('/admin/home-layout');
+      return res.data?.data || res.data;
+    },
+  });
+
+  const { data: liveCategoriesData } = useQuery({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      const res = await apiClient.get('/catalog/categories');
+      return res.data?.data?.categories || res.data?.categories || [];
+    },
+  });
+
+  const { data: liveServicesData } = useQuery({
+    queryKey: ['services'],
+    queryFn: async () => {
+      const res = await apiClient.get('/catalog/services?limit=100');
+      return res.data?.data?.services || res.data?.services || [];
+    },
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await apiClient.put('/admin/home-layout', payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['home-layout'] });
+      setPublishSuccess(true);
+      setTimeout(() => setPublishSuccess(false), 4000);
+    },
+    onError: (err: any) => {
+      alert('Failed to publish home layout: ' + (err.response?.data?.message || err.message));
+    },
+  });
+
   // ── Header & Location State ──
   const [deliveringLocation, setDeliveringLocation] = useState('Jubilee Hills, Hyderabad');
-  const [gpsVerified, setGpsVerified] = useState(true);
-  const [showLocationPrompt, setShowLocationPrompt] = useState(false);
+  const [gpsVerified] = useState(true);
+  const [showLocationPrompt] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
+  const [serviceSections, setServiceSections] = useState<HomeServiceSection[]>(DEFAULT_SERVICE_SECTIONS);
+  const [sectionSearch, setSectionSearch] = useState<Record<string, string>>({});
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
 
   // ── Search Hint Cycling (identical to ServFexSearchBar.kt) ──
   const [currentHintIndex, setCurrentHintIndex] = useState(0);
@@ -119,6 +218,53 @@ export const AppHome: React.FC = () => {
 
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
 
+  // Sync loaded database home layout config into local editor state
+  useEffect(() => {
+    if (homeLayoutData) {
+      if (Array.isArray(homeLayoutData.slides) && homeLayoutData.slides.length > 0) {
+        setSlides(homeLayoutData.slides);
+      }
+      if (Array.isArray(homeLayoutData.sections) && homeLayoutData.sections.length > 0) {
+        setSections((prev) =>
+          prev.map((sec) => {
+            const found = homeLayoutData.sections.find((s: any) => s.id === sec.id);
+            return found ? { ...sec, enabled: found.enabled } : sec;
+          })
+        );
+      }
+      if (homeLayoutData.deliveringLocation) {
+        setDeliveringLocation(homeLayoutData.deliveringLocation);
+      }
+      let nextSections: HomeServiceSection[] = [];
+      if (Array.isArray(homeLayoutData.serviceSections) && homeLayoutData.serviceSections.length > 0) {
+        nextSections = homeLayoutData.serviceSections.map(mapHomeServiceSection);
+      } else if (Array.isArray(homeLayoutData.popularServiceIds) && homeLayoutData.popularServiceIds.length > 0) {
+        nextSections = [
+          mapHomeServiceSection(
+            {
+              id: 'HS-POPULAR',
+              title:
+                typeof homeLayoutData.popularTitle === 'string' &&
+                !isBlankOrDefaultSectionTitle(homeLayoutData.popularTitle)
+                  ? homeLayoutData.popularTitle
+                  : '',
+              subtitle: typeof homeLayoutData.popularSubtitle === 'string' ? homeLayoutData.popularSubtitle : '',
+              serviceIds: homeLayoutData.popularServiceIds,
+              enabled: true,
+            },
+            0
+          ),
+        ];
+      }
+      setServiceSections(nextSections);
+      const draft = nextSections.find(
+        (section) => isBlankOrDefaultSectionTitle(section.title) || section.serviceIds.length === 0
+      );
+      setEditingSectionId(draft?.id ?? null);
+    }
+  }, [homeLayoutData]);
+
+
   // Auto-advance promo carousel every 3.5s like Jetpack Compose LaunchedEffect
   useEffect(() => {
     const activeSlides = slides.filter((s) => s.isActive);
@@ -131,7 +277,7 @@ export const AppHome: React.FC = () => {
 
   // ── Categories State (exact 8 categories from ServFexCategoryCard.kt) ──
   const [selectedCategory, setSelectedCategory] = useState<string>('AC Repair');
-  const categories = [
+  const DEFAULT_CATEGORIES: HomePreviewCategory[] = [
     { id: 'cat_ac', name: 'AC Repair', icon: Fan },
     { id: 'cat_cleaning', name: 'Home Cleaning', icon: Sparkles },
     { id: 'cat_electric', name: 'Electrician', icon: Zap },
@@ -142,45 +288,52 @@ export const AppHome: React.FC = () => {
     { id: 'cat_carpenter', name: 'Carpenter', icon: Hammer },
   ];
 
-  // ── Popular Services State (exact items matching ServFexServiceCard.kt) ──
-  const popularServices = [
-    {
-      id: 'srv_ac_jet',
-      name: 'Master Jet-Pump AC Clean',
-      rating: 4.8,
-      reviewCount: 1240,
-      durationText: '60 mins',
-      startingPrice: 499,
-      icon: Fan,
-    },
-    {
-      id: 'srv_kitchen_deep',
-      name: 'Intense Kitchen Deep Cleaning',
-      rating: 4.9,
-      reviewCount: 850,
-      durationText: '90 mins',
-      startingPrice: 899,
-      icon: Sparkles,
-    },
-    {
-      id: 'srv_bath_clean',
-      name: 'Complete Bathroom Sanitization',
-      rating: 4.8,
-      reviewCount: 2100,
-      durationText: '60 mins',
-      startingPrice: 449,
-      icon: Sparkles,
-    },
-    {
-      id: 'srv_electric_inspect',
-      name: 'Switchboard & Wiring Inspection',
-      rating: 4.7,
-      reviewCount: 1890,
-      durationText: '45 mins',
-      startingPrice: 249,
-      icon: Zap,
-    },
-  ];
+
+  const categories = React.useMemo<HomePreviewCategory[]>(() => {
+    if (liveCategoriesData && liveCategoriesData.length > 0) {
+      const iconMap: Record<string, any> = {
+        ac: Fan,
+        clean: Sparkles,
+        electric: Zap,
+        plumb: Wrench,
+        appliance: Refrigerator,
+        paint: Paintbrush,
+        pest: Bug,
+        carpent: Hammer,
+      };
+      return liveCategoriesData.map((cat: any) => {
+        const lower = (cat.name || '').toLowerCase();
+        const matchedKey = Object.keys(iconMap).find((k) => lower.includes(k));
+        return {
+          id: cat.id,
+          name: cat.name,
+          icon: matchedKey ? iconMap[matchedKey] : Sparkles,
+        };
+      });
+    }
+    return DEFAULT_CATEGORIES;
+  }, [liveCategoriesData]);
+
+  const catalogServices = React.useMemo(() => (Array.isArray(liveServicesData) ? liveServicesData : []), [liveServicesData]);
+
+  const mapServiceToPreview = (srv: any): HomePreviewService => ({
+    id: srv.id,
+    name: srv.name,
+    rating: srv.rating || 4.8,
+    reviewCount: srv.reviewCount || 120,
+    durationText: srv.durationText || '60 mins',
+    startingPrice: srv.startingPrice || srv.basePrice || 499,
+    icon: Sparkles,
+  });
+
+  const resolveSectionServices = (ids: string[]): HomePreviewService[] => {
+    if (ids.length === 0 || catalogServices.length === 0) return [];
+    const byId = new Map(catalogServices.map((srv: any) => [srv.id, srv]));
+    return ids
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .map(mapServiceToPreview);
+  };
 
   // ── Bottom Nav Tab State (exact 4 tabs matching ServFexNavTab in ServFexBottomNav.kt) ──
   const [selectedNavTab, setSelectedNavTab] = useState<'home' | 'services' | 'bookings' | 'profile'>('home');
@@ -220,13 +373,6 @@ export const AppHome: React.FC = () => {
       name: 'Categories LazyRow',
       componentName: 'ServFexCategoryCard.kt',
       description: 'Horizontal scrollable 88dp cards with 44dp icon boxes and active highlight',
-      enabled: true,
-    },
-    {
-      id: 'SEC-POPULAR',
-      name: 'Popular Services Section',
-      componentName: 'ServFexServiceCard.kt',
-      description: 'Header with "View All", 60dp icon boxes, ★ rating, duration, and Book pill',
       enabled: true,
     },
     {
@@ -297,9 +443,103 @@ export const AppHome: React.FC = () => {
     );
   };
 
-  const handlePublish = () => {
-    setPublishSuccess(true);
-    setTimeout(() => setPublishSuccess(false), 3000);
+  const updateServiceSection = (id: string, patch: Partial<HomeServiceSection>) => {
+    setServiceSections((prev) => prev.map((section) => (section.id === id ? { ...section, ...patch } : section)));
+  };
+
+  const toggleSectionService = (sectionId: string, serviceId: string) => {
+    setServiceSections((prev) =>
+      prev.map((section) => {
+        if (section.id !== sectionId) return section;
+        const selected = section.serviceIds.includes(serviceId);
+        return {
+          ...section,
+          serviceIds: selected
+            ? section.serviceIds.filter((id) => id !== serviceId)
+            : [...section.serviceIds, serviceId],
+        };
+      })
+    );
+  };
+
+  const moveSectionService = (sectionId: string, serviceId: string, direction: -1 | 1) => {
+    setServiceSections((prev) =>
+      prev.map((section) => {
+        if (section.id !== sectionId) return section;
+        const index = section.serviceIds.indexOf(serviceId);
+        if (index < 0) return section;
+        const next = index + direction;
+        if (next < 0 || next >= section.serviceIds.length) return section;
+        const copy = [...section.serviceIds];
+        const [item] = copy.splice(index, 1);
+        copy.splice(next, 0, item);
+        return { ...section, serviceIds: copy };
+      })
+    );
+  };
+
+  const moveServiceSection = (sectionId: string, direction: -1 | 1) => {
+    setServiceSections((prev) => {
+      const index = prev.findIndex((section) => section.id === sectionId);
+      if (index < 0) return prev;
+      const next = index + direction;
+      if (next < 0 || next >= prev.length) return prev;
+      const copy = [...prev];
+      const [item] = copy.splice(index, 1);
+      copy.splice(next, 0, item);
+      return copy;
+    });
+  };
+
+  const addServiceSection = () => {
+    const id = `HS-${Date.now()}`;
+    setServiceSections((prev) => [
+      ...prev,
+      {
+        id,
+        title: '',
+        subtitle: '',
+        serviceIds: [],
+        enabled: true,
+      },
+    ]);
+    setEditingSectionId(id);
+    setSectionSearch((prev) => ({ ...prev, [id]: '' }));
+  };
+
+  const deleteServiceSection = (sectionId: string) => {
+    setServiceSections((prev) => prev.filter((section) => section.id !== sectionId));
+    setEditingSectionId((current) => (current === sectionId ? null : current));
+  };
+
+  const isSectionEditing = (section: HomeServiceSection) => editingSectionId === section.id;
+
+  const canAddAnotherSection = !editingSectionId;
+
+  const handlePublish = async () => {
+    const firstEnabled = serviceSections.find((section) => section.enabled) || serviceSections[0];
+    await publishMutation.mutateAsync({
+      slides,
+      sections,
+      deliveringLocation,
+      searchHints: SEARCH_HINTS,
+      serviceSections,
+      popularTitle: firstEnabled?.title || '',
+      popularSubtitle: firstEnabled?.subtitle || '',
+      popularServiceIds: firstEnabled?.serviceIds || [],
+    });
+  };
+
+  const saveServiceSection = async (sectionId: string) => {
+    const section = serviceSections.find((item) => item.id === sectionId);
+    if (!section || isBlankOrDefaultSectionTitle(section.title) || section.serviceIds.length < 1) return;
+    try {
+      await handlePublish();
+      setEditingSectionId(null);
+      setSectionSearch((prev) => ({ ...prev, [sectionId]: '' }));
+    } catch {
+      // publishMutation.onError already surfaces the failure
+    }
   };
 
   const activeSlides = slides.filter((s) => s.isActive);
@@ -337,10 +577,15 @@ export const AppHome: React.FC = () => {
           )}
           <button
             onClick={handlePublish}
-            className="px-4 py-2.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-sm transition inline-flex items-center gap-2"
+            disabled={publishMutation.isPending}
+            className="px-4 py-2.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-50 rounded-xl shadow-sm transition inline-flex items-center gap-2"
           >
-            <Sparkles className="w-4 h-4 text-amber-400" />
-            <span>Publish Home Layout</span>
+            {publishMutation.isPending ? (
+              <RotateCw className="w-4 h-4 text-amber-400 animate-spin" />
+            ) : (
+              <Sparkles className="w-4 h-4 text-amber-400" />
+            )}
+            <span>{publishMutation.isPending ? 'Publishing...' : 'Publish Home Layout'}</span>
           </button>
         </div>
       </div>
@@ -349,78 +594,7 @@ export const AppHome: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left Side: Layout Customizer & Component Toggles (7 cols) */}
         <div className="lg:col-span-7 space-y-5">
-          {/* Quick Presets for Location */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-extrabold text-slate-900 text-sm">Delivery Location & Doorstep GPS</h3>
-                <p className="text-xs text-slate-500">Configures the Hero Header location bar and Urban Company prompt.</p>
-              </div>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                Urban Company Model
-              </span>
-            </div>
-
-            <div className="flex flex-wrap gap-1.5 text-xs">
-              <span className="text-slate-400 font-semibold self-center mr-1">Presets:</span>
-              {[
-                'Jubilee Hills, Hyderabad',
-                'HSR Layout, Bengaluru, KA',
-                'Indiranagar, Bengaluru',
-                'Bandra West, Mumbai',
-                'Cyber City, Gurugram',
-              ].map((loc) => (
-                <button
-                  key={loc}
-                  onClick={() => setDeliveringLocation(loc)}
-                  className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition ${
-                    deliveringLocation === loc
-                      ? 'bg-slate-900 text-white border-slate-900 font-bold'
-                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  {loc}
-                </button>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div>
-                <label className="block font-bold text-slate-600 mb-1">Delivering Location Address</label>
-                <input
-                  type="text"
-                  value={deliveringLocation}
-                  onChange={(e) => setDeliveringLocation(e.target.value)}
-                  placeholder="e.g. Jubilee Hills, Hyderabad"
-                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs outline-none focus:border-slate-900"
-                />
-              </div>
-
-              <div className="flex flex-col justify-end space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={gpsVerified}
-                    onChange={(e) => setGpsVerified(e.target.checked)}
-                    className="w-4 h-4 rounded text-slate-900 focus:ring-slate-900"
-                  />
-                  <span className="font-semibold text-slate-700">Display "GPS VERIFIED"</span>
-                </label>
-
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={showLocationPrompt}
-                    onChange={(e) => setShowLocationPrompt(e.target.checked)}
-                    className="w-4 h-4 rounded text-slate-900 focus:ring-slate-900"
-                  />
-                  <span className="font-semibold text-slate-700">Display UC Location Prompt Banner</span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 2: Promotional Slides Management */}
+          {/* Promo Banner Carousel */}
           <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -507,10 +681,264 @@ export const AppHome: React.FC = () => {
             </div>
           </div>
 
-          {/* Section 3: Modular Sections Configuration */}
+          {/* Home service collections: title, description, services, hide/show */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-sm">Home Service Sections</h3>
+                <p className="text-xs text-slate-500">
+                  Type your own heading, tick every service this section should show, then tap Done. Home shows the first 4; extra services open on View more.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={addServiceSection}
+                disabled={!canAddAnotherSection}
+                className="px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-40 disabled:hover:bg-indigo-50 rounded-xl transition inline-flex items-center gap-1.5 shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Section</span>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {serviceSections.map((section, sectionIndex) => {
+                const searchQuery = (sectionSearch[section.id] || '').trim().toLowerCase();
+                const editing = isSectionEditing(section);
+                const selectedNames = section.serviceIds
+                  .map((id) => catalogServices.find((item: any) => item.id === id)?.name)
+                  .filter(Boolean);
+                return (
+                  <div
+                    key={section.id}
+                    className={`rounded-2xl border p-4 space-y-3 ${
+                      section.enabled ? 'border-slate-200 bg-slate-50/40' : 'border-slate-200 bg-slate-100/70 opacity-75'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+                          Section {sectionIndex + 1}
+                          {!section.enabled ? ' • Hidden' : editing ? ' • Editing' : ''}
+                        </p>
+                        {!editing && (
+                          <>
+                            <p className="text-sm font-bold text-slate-900 truncate pt-0.5">
+                              {section.title || 'Untitled section'}
+                            </p>
+                            {section.subtitle.trim() && (
+                              <p className="text-xs text-slate-500 truncate">{section.subtitle}</p>
+                            )}
+                            <p className="text-[11px] text-slate-500 pt-1">
+                              {section.serviceIds.length} service{section.serviceIds.length === 1 ? '' : 's'}
+                              {selectedNames.length > 0 ? ` · ${selectedNames.slice(0, 3).join(', ')}` : ''}
+                              {selectedNames.length > 3 ? '…' : ''}
+                            </p>
+                          </>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => moveServiceSection(section.id, -1)}
+                          disabled={sectionIndex === 0}
+                          className="p-1 rounded-lg text-slate-500 hover:bg-white disabled:opacity-30"
+                          title="Move section up"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveServiceSection(section.id, 1)}
+                          disabled={sectionIndex === serviceSections.length - 1}
+                          className="p-1 rounded-lg text-slate-500 hover:bg-white disabled:opacity-30"
+                          title="Move section down"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateServiceSection(section.id, { enabled: !section.enabled })}
+                          className={`px-2 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 ${
+                            section.enabled
+                              ? 'text-emerald-700 bg-emerald-50'
+                              : 'text-slate-500 bg-white'
+                          }`}
+                          title={section.enabled ? 'Hide on app' : 'Show on app'}
+                        >
+                          {section.enabled ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                          {section.enabled ? 'Visible' : 'Hidden'}
+                        </button>
+                        {!editing && (
+                          <button
+                            type="button"
+                            onClick={() => setEditingSectionId(section.id)}
+                            className="px-2 py-1 rounded-lg text-[11px] font-bold text-indigo-700 bg-indigo-50 inline-flex items-center gap-1"
+                            title="Edit section"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            Edit
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => deleteServiceSection(section.id)}
+                          className="p-1 rounded-lg text-slate-400 hover:text-rose-500"
+                          title="Delete section"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {editing && (
+                      <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <label className="space-y-1.5">
+                        <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">Title</span>
+                        <input
+                          value={section.title}
+                          onChange={(e) => updateServiceSection(section.id, { title: e.target.value })}
+                          onFocus={(e) => {
+                            if (isBlankOrDefaultSectionTitle(e.target.value)) e.target.select();
+                          }}
+                          placeholder="e.g. AC Repair & Service"
+                          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                        />
+                        {isBlankOrDefaultSectionTitle(section.title) && (
+                          <p className="text-[11px] text-amber-600">
+                            Replace this placeholder with the heading customers should see.
+                          </p>
+                        )}
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">Description</span>
+                        <input
+                          value={section.subtitle}
+                          onChange={(e) => updateServiceSection(section.id, { subtitle: e.target.value })}
+                          placeholder="Optional — shown under the title"
+                          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                        />
+                      </label>
+                    </div>
+
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        value={sectionSearch[section.id] || ''}
+                        onChange={(e) =>
+                          setSectionSearch((prev) => ({ ...prev, [section.id]: e.target.value }))
+                        }
+                        placeholder="Search services to add…"
+                        className="w-full rounded-xl border border-slate-200 pl-9 pr-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                      />
+                    </div>
+
+                    <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100 bg-white">
+                      {catalogServices
+                        .filter((srv: any) => {
+                          if (!searchQuery) return true;
+                          return String(srv.name || '').toLowerCase().includes(searchQuery);
+                        })
+                        .map((srv: any) => {
+                          const selected = section.serviceIds.includes(srv.id);
+                          return (
+                            <label
+                              key={`${section.id}-${srv.id}`}
+                              className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                onChange={() => toggleSectionService(section.id, srv.id)}
+                                className="h-4 w-4 rounded border-slate-300 text-indigo-600"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold text-slate-900 truncate">{srv.name}</p>
+                                <p className="text-[11px] text-slate-500">
+                                  Starting from ₹{srv.startingPrice || srv.basePrice || 0}
+                                  {srv.durationText ? ` • ${srv.durationText}` : ''}
+                                </p>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      {catalogServices.length === 0 && (
+                        <p className="px-3 py-4 text-xs text-slate-500">No catalog services found yet.</p>
+                      )}
+                    </div>
+
+                    {section.serviceIds.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">
+                          Display order ({section.serviceIds.length}) · first 4 on Home
+                        </p>
+                        {section.serviceIds.map((id, index) => {
+                          const srv = catalogServices.find((item: any) => item.id === id);
+                          if (!srv) return null;
+                          return (
+                            <div key={`${section.id}-order-${id}`} className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2 bg-white">
+                              <span className="text-sm font-semibold text-slate-900 truncate pr-3">
+                                {index + 1}. {srv.name}
+                                {index >= 4 ? ' · View more' : ''}
+                              </span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => moveSectionService(section.id, id, -1)}
+                                  disabled={index === 0}
+                                  className="p-1 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-30"
+                                  title="Move up"
+                                >
+                                  <ArrowUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => moveSectionService(section.id, id, 1)}
+                                  disabled={index === section.serviceIds.length - 1}
+                                  className="p-1 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-30"
+                                  title="Move down"
+                                >
+                                  <ArrowDown className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between gap-3 pt-1">
+                      <p className="text-[11px] text-slate-500">
+                        {section.serviceIds.length === 0
+                          ? 'Select as many services as you want. The editor stays open until you tap Done.'
+                          : `${section.serviceIds.length} selected · first 4 appear on Home.`}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => saveServiceSection(section.id)}
+                        disabled={isBlankOrDefaultSectionTitle(section.title) || section.serviceIds.length < 1 || publishMutation.isPending}
+                        className="px-4 py-2 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:hover:bg-slate-900 rounded-xl inline-flex items-center gap-1.5 shrink-0"
+                      >
+                        <Check className="w-4 h-4" />
+                        {publishMutation.isPending ? 'Publishing…' : 'Done & Publish'}
+                      </button>
+                    </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+              {serviceSections.length === 0 && !isLayoutLoading && (
+                <p className="text-xs text-slate-500">No sections yet. Add one to show services on Home.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Section 4: Modular Sections Configuration */}
           <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs space-y-4">
             <div>
-              <h3 className="font-extrabold text-slate-900 text-sm">Customer App Sections (8 Modular Components)</h3>
+              <h3 className="font-extrabold text-slate-900 text-sm">Customer App Sections</h3>
               <p className="text-xs text-slate-500">
                 Toggle visibility for each individual UI composable rendered inside <code className="font-mono text-slate-700">HomeScreen.kt</code>.
               </p>
@@ -762,7 +1190,7 @@ export const AppHome: React.FC = () => {
 
                   {/* Horizontal Scroll Row (LazyRow) */}
                   <div className="flex items-center gap-3 overflow-x-auto px-4 pb-1 scrollbar-none">
-                    {categories.map((cat) => {
+                    {categories.map((cat: HomePreviewCategory) => {
                       const IconComponent = cat.icon;
                       const isSelected = selectedCategory === cat.name;
                       return (
@@ -804,88 +1232,86 @@ export const AppHome: React.FC = () => {
               {/* Spacing: 16dp */}
               <div className="h-4" />
 
-              {/* 6. POPULAR SERVICES SECTION (ServFexServiceCard.kt) */}
-              {isSectionEnabled('SEC-POPULAR') && (
-                <div className="px-4 space-y-3">
-                  {/* ServFexSectionHeader.kt */}
-                  <div className="flex items-center justify-between py-1">
-                    <div>
-                      <h2 className="text-[20px] font-semibold text-[#0A0A0A] leading-tight">
-                        Popular Services
-                      </h2>
-                      <p className="text-[14px] text-[#4B5563] pt-0.5 leading-snug">
-                        Most booked in your area this week
-                      </p>
-                    </div>
-                    <span className="text-[12px] font-medium text-[#0A0A0A] cursor-pointer hover:underline shrink-0">
-                      View All
-                    </span>
-                  </div>
+              {/* 6. ADMIN-MANAGED SERVICE SECTIONS */}
+              {serviceSections
+                .filter((section) => section.enabled)
+                .map((section) => {
+                  const sectionServices = resolveSectionServices(section.serviceIds);
+                  const previewServices = sectionServices.slice(0, 4);
+                  const hasMore = sectionServices.length > 4;
+                  return (
+                    <div key={`preview-${section.id}`} className="px-4 space-y-3 pb-4">
+                      <div className="flex items-center justify-between py-1">
+                        <div>
+                          <h2 className="text-[20px] font-semibold text-[#0A0A0A] leading-tight">
+                            {section.title || 'Services'}
+                          </h2>
+                          {section.subtitle.trim() && (
+                            <p className="text-[14px] text-[#4B5563] pt-0.5 leading-snug">
+                              {section.subtitle}
+                            </p>
+                          )}
+                        </div>
+                        {hasMore && (
+                          <span className="text-[12px] font-medium text-[#0A0A0A] shrink-0">
+                            View more
+                          </span>
+                        )}
+                      </div>
 
-                  {/* List of Popular Service Cards (Exact 1-column mobile stack) */}
-                  <div className="space-y-3">
-                    {popularServices.map((service) => {
-                      const IconComponent = service.icon;
-                      return (
-                        <div
-                          key={service.id}
-                          className="bg-white rounded-2xl border border-[#E5E7EB] p-4 shadow-xs space-y-3 cursor-pointer hover:shadow-md transition"
-                        >
-                          {/* Top row: 60dp icon box + title/rating/duration */}
-                          <div className="flex items-start gap-3">
-                            <div className="w-[60px] h-[60px] rounded-xl bg-[#F4F5F7] flex items-center justify-center shrink-0">
-                              <IconComponent className="w-8 h-8 text-[#0A0A0A]" />
-                            </div>
-
-                            <div className="flex-1 min-w-0">
-                              <h3 className="text-[16px] font-semibold text-[#0A0A0A] truncate leading-tight">
-                                {service.name}
-                              </h3>
-
-                              <div className="flex items-center gap-2 pt-1 text-[12px]">
-                                {/* Star Rating */}
-                                <div className="flex items-center gap-1">
-                                  <Star className="w-3.5 h-3.5 fill-[#F59E0B] text-[#F59E0B]" />
-                                  <span className="font-semibold text-[#0A0A0A]">
-                                    {service.rating.toFixed(1)}
-                                  </span>
-                                  <span className="text-[#4B5563]">
-                                    ({service.reviewCount})
-                                  </span>
+                      <div className="space-y-3">
+                        {previewServices.length === 0 && (
+                          <p className="text-[12px] text-[#6B7280] py-2">No services selected yet.</p>
+                        )}
+                        {previewServices.map((service: HomePreviewService) => {
+                          const IconComponent = service.icon;
+                          return (
+                            <div
+                              key={`${section.id}-${service.id}`}
+                              className="bg-white rounded-2xl border border-[#E5E7EB] p-4 shadow-xs space-y-3"
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className="w-[60px] h-[60px] rounded-xl bg-[#F4F5F7] flex items-center justify-center shrink-0">
+                                  <IconComponent className="w-8 h-8 text-[#0A0A0A]" />
                                 </div>
-
-                                <span className="text-[#4B5563]">•</span>
-
-                                {/* Duration */}
-                                <div className="flex items-center gap-1 text-[#4B5563]">
-                                  <Clock className="w-3 h-3" />
-                                  <span>{service.durationText}</span>
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="text-[16px] font-semibold text-[#0A0A0A] truncate leading-tight">
+                                    {service.name}
+                                  </h3>
+                                  <div className="flex items-center gap-2 pt-1 text-[12px]">
+                                    <div className="flex items-center gap-1">
+                                      <Star className="w-3.5 h-3.5 fill-[#F59E0B] text-[#F59E0B]" />
+                                      <span className="font-semibold text-[#0A0A0A]">
+                                        {service.rating.toFixed(1)}
+                                      </span>
+                                      <span className="text-[#4B5563]">({service.reviewCount})</span>
+                                    </div>
+                                    <span className="text-[#4B5563]">•</span>
+                                    <div className="flex items-center gap-1 text-[#4B5563]">
+                                      <Clock className="w-3 h-3" />
+                                      <span>{service.durationText}</span>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
+                              <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                                <div className="flex items-baseline gap-1">
+                                  <span className="text-[14px] text-[#4B5563]">Starting from</span>
+                                  <span className="text-[16px] font-bold text-[#0A0A0A]">
+                                    ₹{service.startingPrice}
+                                  </span>
+                                </div>
+                                <button className="px-4 py-2 rounded-xl text-[14px] font-semibold text-white bg-[#0A0A0A]">
+                                  Book
+                                </button>
+                              </div>
                             </div>
-                          </div>
-
-                          {/* Bottom row: Starting from ₹Price + Book button */}
-                          <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                            <div className="flex items-baseline gap-1">
-                              <span className="text-[14px] text-[#4B5563]">
-                                Starting from
-                              </span>
-                              <span className="text-[16px] font-bold text-[#0A0A0A]">
-                                ₹{service.startingPrice}
-                              </span>
-                            </div>
-
-                            <button className="px-4 py-2 rounded-xl text-[14px] font-semibold text-white bg-[#0A0A0A] hover:bg-slate-800 transition shadow-xs">
-                              Book
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
 
               {/* Spacing: 16dp */}
               <div className="h-4" />
@@ -976,63 +1402,40 @@ export const AppHome: React.FC = () => {
                 </div>
               )}
 
-              {/* Spacing: 32dp at bottom of list */}
-              <div className="h-8" />
+              {/* Space so the last section clears the floating nav */}
+              <div className="h-24" />
             </div>
 
-            {/* 8. FIXED BOTTOM NAVIGATION BAR (ServFexBottomNav.kt: 64dp height, white) */}
+            {/* Floating pill bottom nav */}
             {isSectionEnabled('SEC-BOTTOM-NAV') && (
-              <div className="bg-white border-t border-[#E5E7EB] h-16 flex items-center justify-around px-2 shrink-0">
-                {/* Tab 1: Home */}
-                <div
-                  onClick={() => setSelectedNavTab('home')}
-                  className={`flex-1 flex flex-col items-center justify-center py-1 cursor-pointer transition ${
-                    selectedNavTab === 'home' ? 'text-[#0A0A0A]' : 'text-[#4B5563]'
-                  }`}
-                >
-                  <Home className="w-6 h-6 stroke-[2]" />
-                  <span className="text-[12px] font-medium pt-1">Home</span>
-                </div>
-
-                {/* Tab 2: Services */}
-                <div
-                  onClick={() => setSelectedNavTab('services')}
-                  className={`flex-1 flex flex-col items-center justify-center py-1 cursor-pointer transition ${
-                    selectedNavTab === 'services' ? 'text-[#0A0A0A]' : 'text-[#4B5563]'
-                  }`}
-                >
-                  <Wrench className="w-6 h-6 stroke-[2]" />
-                  <span className="text-[12px] font-medium pt-1">Services</span>
-                </div>
-
-                {/* Tab 3: Bookings */}
-                <div
-                  onClick={() => setSelectedNavTab('bookings')}
-                  className={`flex-1 flex flex-col items-center justify-center py-1 cursor-pointer transition ${
-                    selectedNavTab === 'bookings' ? 'text-[#0A0A0A]' : 'text-[#4B5563]'
-                  }`}
-                >
-                  <Calendar className="w-6 h-6 stroke-[2]" />
-                  <span className="text-[12px] font-medium pt-1">Bookings</span>
-                </div>
-
-                {/* Tab 4: Profile */}
-                <div
-                  onClick={() => setSelectedNavTab('profile')}
-                  className={`flex-1 flex flex-col items-center justify-center py-1 cursor-pointer transition ${
-                    selectedNavTab === 'profile' ? 'text-[#0A0A0A]' : 'text-[#4B5563]'
-                  }`}
-                >
-                  <User className="w-6 h-6 stroke-[2]" />
-                  <span className="text-[12px] font-medium pt-1">Profile</span>
+              <div className="absolute bottom-3 left-0 right-0 flex justify-center px-5 pointer-events-none">
+                <div className="pointer-events-auto bg-white rounded-full shadow-[0_12px_32px_rgba(0,0,0,0.18)] px-2 py-1.5 flex items-center gap-1">
+                  {[
+                    { id: 'home', label: 'Home', Icon: Home },
+                    { id: 'services', label: 'Cart', Icon: ShoppingCart },
+                    { id: 'bookings', label: 'Bookings', Icon: Calendar },
+                    { id: 'profile', label: 'Profile', Icon: User },
+                  ].map((tab) => {
+                    const active = selectedNavTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setSelectedNavTab(tab.id as typeof selectedNavTab)}
+                        className={`min-w-[64px] flex flex-col items-center justify-center rounded-[28px] px-3.5 py-2 transition ${
+                          active ? 'bg-[#E8EAED] text-[#0A0A0A]' : 'text-[#5F6368]'
+                        }`}
+                      >
+                        <tab.Icon className={`w-[22px] h-[22px] ${active ? 'stroke-[2.4]' : 'stroke-[1.8]'}`} />
+                        <span className={`text-[11px] pt-0.5 ${active ? 'font-semibold' : 'font-medium'}`}>
+                          {tab.label}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
-
-            {/* Home Navigation Gesture Pill */}
-            <div className="bg-white pb-1.5 flex justify-center">
-              <div className="w-28 h-1 bg-slate-300 rounded-full" />
-            </div>
           </div>
         </div>
       </div>
