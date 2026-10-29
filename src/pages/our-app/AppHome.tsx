@@ -89,15 +89,7 @@ interface HomeServiceSection {
 
 const DEFAULT_SERVICE_SECTIONS: HomeServiceSection[] = [];
 
-const isBlankOrDefaultSectionTitle = (title: string): boolean => {
-  const normalized = title.trim().toLowerCase();
-  return (
-    normalized.length === 0 ||
-    normalized === 'popular services' ||
-    normalized === 'services' ||
-    /^service section\s*\d+$/.test(normalized)
-  );
-};
+const isBlankSectionTitle = (title: string): boolean => title.trim().length === 0;
 
 const mapHomeServiceSection = (section: any, index: number): HomeServiceSection => ({
   id: typeof section?.id === 'string' && section.id ? section.id : `HS-${index + 1}`,
@@ -245,7 +237,7 @@ export const AppHome: React.FC = () => {
               id: 'HS-POPULAR',
               title:
                 typeof homeLayoutData.popularTitle === 'string' &&
-                !isBlankOrDefaultSectionTitle(homeLayoutData.popularTitle)
+                !isBlankSectionTitle(homeLayoutData.popularTitle)
                   ? homeLayoutData.popularTitle
                   : '',
               subtitle: typeof homeLayoutData.popularSubtitle === 'string' ? homeLayoutData.popularSubtitle : '',
@@ -258,7 +250,7 @@ export const AppHome: React.FC = () => {
       }
       setServiceSections(nextSections);
       const draft = nextSections.find(
-        (section) => isBlankOrDefaultSectionTitle(section.title) || section.serviceIds.length === 0
+        (section) => isBlankSectionTitle(section.title) || section.serviceIds.length === 0
       );
       setEditingSectionId(draft?.id ?? null);
     }
@@ -532,7 +524,7 @@ export const AppHome: React.FC = () => {
 
   const saveServiceSection = async (sectionId: string) => {
     const section = serviceSections.find((item) => item.id === sectionId);
-    if (!section || isBlankOrDefaultSectionTitle(section.title) || section.serviceIds.length < 1) return;
+    if (!section || isBlankSectionTitle(section.title) || section.serviceIds.length < 1) return;
     try {
       await handlePublish();
       setEditingSectionId(null);
@@ -800,16 +792,11 @@ export const AppHome: React.FC = () => {
                           value={section.title}
                           onChange={(e) => updateServiceSection(section.id, { title: e.target.value })}
                           onFocus={(e) => {
-                            if (isBlankOrDefaultSectionTitle(e.target.value)) e.target.select();
+                            if (isBlankSectionTitle(e.target.value)) e.target.select();
                           }}
-                          placeholder="e.g. AC Repair & Service"
+                          placeholder="Popular Services"
                           className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
                         />
-                        {isBlankOrDefaultSectionTitle(section.title) && (
-                          <p className="text-[11px] text-amber-600">
-                            Replace this placeholder with the heading customers should see.
-                          </p>
-                        )}
                       </label>
                       <label className="space-y-1.5">
                         <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">Description</span>
@@ -917,7 +904,7 @@ export const AppHome: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => saveServiceSection(section.id)}
-                        disabled={isBlankOrDefaultSectionTitle(section.title) || section.serviceIds.length < 1 || publishMutation.isPending}
+                        disabled={isBlankSectionTitle(section.title) || section.serviceIds.length < 1 || publishMutation.isPending}
                         className="px-4 py-2 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:hover:bg-slate-900 rounded-xl inline-flex items-center gap-1.5 shrink-0"
                       >
                         <Check className="w-4 h-4" />
