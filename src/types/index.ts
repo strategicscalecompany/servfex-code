@@ -74,6 +74,26 @@ export interface Document {
   createdAt: string;
 }
 
+export interface CustomerBookingSummary {
+  id: string;
+  bookingNumber: string;
+  status: BookingStatus;
+  scheduledDate: string;
+  scheduledTimeSlot: string;
+  totalAmount: number | string;
+  paymentStatus: PaymentStatus;
+  paymentMethod?: PaymentMethod;
+  createdAt: string;
+  service?: { id?: string; name: string } | null;
+  package?: { id?: string; name?: string | null; title?: string | null } | null;
+  vendor?: { id?: string; companyName: string } | null;
+  employee?: { id?: string; name?: string | null; phone?: string | null } | null;
+  address?: UserAddress | null;
+  location?: string | null;
+  serviceLatitude?: number | null;
+  serviceLongitude?: number | null;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -86,6 +106,11 @@ export interface User {
   lastLoginAt?: string | null;
   createdAt: string;
   updatedAt?: string;
+  location?: string | null;
+  defaultAddress?: UserAddress | null;
+  addresses?: UserAddress[];
+  recentBookings?: CustomerBookingSummary[];
+  bookings?: CustomerBookingSummary[];
   documents?: Document[];
   customerProfile?: CustomerProfile | null;
   vendorProfile?: VendorProfile | null;

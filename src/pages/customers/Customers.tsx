@@ -1,36 +1,138 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../api/client';
-import { User } from '../../types';
+import { CustomerBookingSummary, User } from '../../types';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Modal } from '../../components/common/Modal';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
 import {
-  Users,
   Search,
   UserPlus,
-  Ban,
-  CheckCircle,
-  Eye,
   Loader2,
   Calendar,
   MapPin,
   Phone,
-  Mail,
+  ChevronDown,
+  ChevronRight,
+  AlertCircle,
+  Trash2,
 } from 'lucide-react';
+import clsx from 'clsx';
+
+const formatMoney = (value: number | string | null | undefined) => {
+  const amount = Number(value || 0);
+  return `₹${Number.isFinite(amount) ? amount.toLocaleString('en-IN') : '0'}`;
+};
+
+const formatPhone = (phone?: string | null) => {
+  if (!phone) return 'No mobile number';
+  return phone;
+};
+
+const formatLocation = (customer: User) => {
+  if (customer.location) return customer.location;
+  const address = customer.defaultAddress || customer.addresses?.[0];
+  if (!address) return null;
+  return [address.addressLine1, address.landmark, address.city, address.state, address.postalCode]
+    .filter(Boolean)
+    .join(', ');
+};
+
+const customerInitial = (name?: string | null) => (name?.trim()?.charAt(0) || '?').toUpperCase();
+
+const BookingDetailsTable: React.FC<{
+  bookings: CustomerBookingSummary[];
+  isLoading?: boolean;
+  emptyLabel?: string;
+}> = ({ bookings, isLoading, emptyLabel }) => {
+  if (isLoading) {
+    return (
+      <div className="py-6 text-center text-slate-400 text-xs">
+        <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-indigo-600" />
+        Loading booking details...
+      </div>
+    );
+  }
+
+  if (!bookings.length) {
+    return (
+      <p className="py-4 text-center text-xs text-slate-400">
+        {emptyLabel || 'No bookings placed by this customer yet.'}
+      </p>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left">
+        <thead>
+          <tr className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            <th className="py-2 px-3">Booking</th>
+            <th className="py-2 px-3">Service</th>
+            <th className="py-2 px-3">Schedule</th>
+            <th className="py-2 px-3">Location</th>
+            <th className="py-2 px-3">Amount</th>
+            <th className="py-2 px-3">Status</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {bookings.map((booking) => (
+            <tr key={booking.id} className="text-xs">
+              <td className="py-2.5 px-3">
+                <Link
+                  to="/bookings"
+                  className="font-bold text-indigo-600 hover:text-indigo-800"
+                >
+                  {booking.bookingNumber}
+                </Link>
+                <span className="block text-[11px] text-slate-400 mt-0.5">
+                  {booking.vendor?.companyName || 'Unassigned partner'}
+                </span>
+              </td>
+              <td className="py-2.5 px-3">
+                <span className="font-semibold text-slate-800 block">
+                  {booking.service?.name || 'Service'}
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  {booking.package?.name || booking.package?.title || '—'}
+                </span>
+              </td>
+              <td className="py-2.5 px-3 whitespace-nowrap">
+                <span className="font-medium text-slate-800 block">{booking.scheduledDate}</span>
+                <span className="text-[11px] text-slate-400">{booking.scheduledTimeSlot}</span>
+              </td>
+              <td className="py-2.5 px-3 max-w-[220px]">
+                <span className="text-slate-600 line-clamp-2">
+                  {booking.location || 'Location not captured'}
+                </span>
+              </td>
+              <td className="py-2.5 px-3 whitespace-nowrap">
+                <span className="font-bold text-slate-900 block">{formatMoney(booking.totalAmount)}</span>
+                <StatusBadge status={booking.paymentStatus} />
+              </td>
+              <td className="py-2.5 px-3 whitespace-nowrap">
+                <StatusBadge status={booking.status} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
 
 export const Customers: React.FC = () => {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const [selectedCustomer, setSelectedCustomer] = useState<User | null>(null);
-  const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [isDeactivateOpen, setIsDeactivateOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
-  // Form State
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -39,7 +141,7 @@ export const Customers: React.FC = () => {
     notes: '',
   });
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['customers', search, statusFilter, page],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -53,8 +155,17 @@ export const Customers: React.FC = () => {
     },
   });
 
+  const { data: expandedBookings, isLoading: isBookingsLoading } = useQuery({
+    queryKey: ['customer-bookings', expandedId],
+    queryFn: async () => {
+      const res = await apiClient.get(`/admin/customers/${expandedId}/bookings?limit=20`);
+      return res.data;
+    },
+    enabled: !!expandedId,
+  });
+
   const createMutation = useMutation({
-    mutationFn: async (payload: any) => {
+    mutationFn: async (payload: typeof formData) => {
       return apiClient.post('/admin/customers', payload);
     },
     onSuccess: () => {
@@ -64,25 +175,31 @@ export const Customers: React.FC = () => {
     },
   });
 
-  const statusMutation = useMutation({
-    mutationFn: async ({ id, status, reason }: { id: string; status: string; reason: string }) => {
-      return apiClient.patch(`/admin/customers/${id}`, { status, reason });
+  const deleteMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      return apiClient.delete(`/admin/customers/${id}`, { data: { reason } });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['customers'] });
-      setIsDeactivateOpen(false);
-      setIsDetailOpen(false);
+      queryClient.removeQueries({ queryKey: ['customer-bookings'] });
+      setIsDeleteOpen(false);
+      setSelectedCustomer(null);
     },
   });
 
+  const customers: User[] = data?.data || [];
+
+  const toggleExpanded = (customerId: string) => {
+    setExpandedId((current) => (current === customerId ? null : customerId));
+  };
+
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Customers Directory</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Registered customer accounts, saved delivery addresses, and booking histories.
+            Registered customer accounts with mobile numbers, delivery locations, and booking histories.
           </p>
         </div>
 
@@ -95,7 +212,6 @@ export const Customers: React.FC = () => {
         </button>
       </div>
 
-      {/* Filter & Search Bar */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -106,7 +222,7 @@ export const Customers: React.FC = () => {
               setSearch(e.target.value);
               setPage(1);
             }}
-            placeholder="Search by customer name, email, or phone number..."
+            placeholder="Search by customer name, email, or mobile number..."
             className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 text-sm focus:border-indigo-500 outline-none"
           />
         </div>
@@ -126,17 +242,16 @@ export const Customers: React.FC = () => {
         </select>
       </div>
 
-      {/* Customers Table */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <th className="py-3.5 px-4 w-10" />
                 <th className="py-3.5 px-4">Customer Name</th>
-                <th className="py-3.5 px-4">Contact</th>
-                <th className="py-3.5 px-4">Default City</th>
-                <th className="py-3.5 px-4">Total Orders</th>
-                <th className="py-3.5 px-4">Total Spent</th>
+                <th className="py-3.5 px-4">Mobile Number</th>
+                <th className="py-3.5 px-4">Location</th>
+                <th className="py-3.5 px-4">Bookings</th>
                 <th className="py-3.5 px-4">Status</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
@@ -146,67 +261,146 @@ export const Customers: React.FC = () => {
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-slate-400">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-600" />
-                    Loading customer accounts...
+                    Loading registered customers...
                   </td>
                 </tr>
-              ) : data?.data?.length === 0 ? (
+              ) : isError ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center">
+                    <AlertCircle className="w-6 h-6 mx-auto mb-2 text-rose-500" />
+                    <p className="text-sm font-semibold text-slate-800">Could not load registered customers</p>
+                    <p className="text-xs text-slate-400 mt-1 mb-3">
+                      {(error as any)?.response?.data?.error?.message || 'Please retry fetching customer records.'}
+                    </p>
+                    <button
+                      onClick={() => refetch()}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100"
+                    >
+                      Retry
+                    </button>
+                  </td>
+                </tr>
+              ) : customers.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-slate-400 text-xs">
-                    No customers found matching current filters.
+                    No registered customers found matching current filters.
                   </td>
                 </tr>
               ) : (
-                data?.data?.map((u: any) => (
-                  <tr key={u.id} className="hover:bg-slate-50/70 transition">
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs">
-                          {u.name.charAt(0)}
-                        </div>
-                        <div>
-                          <span className="font-semibold text-slate-900 block">{u.name}</span>
-                          <span className="text-xs text-slate-400">
-                            Joined {new Date(u.createdAt).toLocaleDateString()}
+                customers.map((customer) => {
+                  const isExpanded = expandedId === customer.id;
+                  const location = formatLocation(customer);
+                  const bookingCount = customer.customerProfile?.totalBookings ?? customer.recentBookings?.length ?? 0;
+                  const dropdownBookings: CustomerBookingSummary[] =
+                    expandedBookings?.data && isExpanded
+                      ? expandedBookings.data
+                      : customer.recentBookings || [];
+
+                  return (
+                    <React.Fragment key={customer.id}>
+                      <tr className={clsx('hover:bg-slate-50/70 transition', isExpanded && 'bg-indigo-50/40')}>
+                        <td className="py-3.5 px-4">
+                          <button
+                            onClick={() => toggleExpanded(customer.id)}
+                            className="w-7 h-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 inline-flex items-center justify-center text-slate-500"
+                            title={isExpanded ? 'Hide bookings' : 'Show bookings'}
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4" />
+                            )}
+                          </button>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs">
+                              {customerInitial(customer.name)}
+                            </div>
+                            <div>
+                              <span className="font-semibold text-slate-900 block">{customer.name || 'Unnamed customer'}</span>
+                              <span className="text-xs text-slate-400">{customer.email}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-800">
+                            <Phone className="w-3.5 h-3.5 text-slate-400" />
+                            {formatPhone(customer.phone)}
                           </span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span className="text-xs text-slate-700 block">{u.email}</span>
-                      <span className="text-xs text-slate-400">{u.phone || 'No phone'}</span>
-                    </td>
-                    <td className="py-3.5 px-4 text-xs text-slate-600">
-                      {u.defaultAddress ? `${u.defaultAddress.city}, ${u.defaultAddress.state}` : '—'}
-                    </td>
-                    <td className="py-3.5 px-4 font-bold text-slate-900">
-                      {u.customerProfile?.totalBookings || 0}
-                    </td>
-                    <td className="py-3.5 px-4 font-bold text-slate-900">
-                      ₹{Number(u.customerProfile?.totalSpent || 0)}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <StatusBadge status={u.status} />
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <button
-                        onClick={() => {
-                          setSelectedCustomer(u);
-                          setIsDetailOpen(true);
-                        }}
-                        className="px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition inline-flex items-center gap-1.5"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>Inspect</span>
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                        </td>
+                        <td className="py-3.5 px-4 max-w-[260px]">
+                          {location ? (
+                            <span className="inline-flex items-start gap-1.5 text-xs text-slate-600">
+                              <MapPin className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" />
+                              <span className="line-clamp-2">{location}</span>
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-400">No location saved</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <button
+                            onClick={() => toggleExpanded(customer.id)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100"
+                          >
+                            <Calendar className="w-3.5 h-3.5" />
+                            {bookingCount} {bookingCount === 1 ? 'booking' : 'bookings'}
+                            <ChevronDown className={clsx('w-3.5 h-3.5 transition', isExpanded && 'rotate-180')} />
+                          </button>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <StatusBadge status={customer.status} />
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <button
+                            onClick={() => {
+                              deleteMutation.reset();
+                              setSelectedCustomer(customer);
+                              setIsDeleteOpen(true);
+                            }}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 transition inline-flex items-center gap-1.5"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete</span>
+                          </button>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="bg-slate-50/80">
+                          <td colSpan={7} className="px-4 py-4">
+                            <div className="rounded-xl border border-slate-200 bg-white">
+                              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                                <div>
+                                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                                    Booking details
+                                  </p>
+                                  <p className="text-sm font-semibold text-slate-800 mt-0.5">
+                                    {customer.name || 'Customer'} · {formatPhone(customer.phone)}
+                                  </p>
+                                </div>
+                                {expandedBookings?.pagination?.total != null && (
+                                  <span className="text-xs text-slate-400">
+                                    {expandedBookings.pagination.total} total
+                                  </span>
+                                )}
+                              </div>
+                              <BookingDetailsTable
+                                bookings={dropdownBookings}
+                                isLoading={isBookingsLoading && dropdownBookings.length === 0}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
 
-        {/* Pagination Bar */}
         {data?.pagination && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 text-xs text-slate-500">
             <span>
@@ -232,91 +426,31 @@ export const Customers: React.FC = () => {
         )}
       </div>
 
-      {/* Inspect Customer Modal */}
-      {selectedCustomer && (
-        <Modal
-          isOpen={isDetailOpen}
-          onClose={() => setIsDetailOpen(false)}
-          title={`Customer: ${selectedCustomer.name}`}
-          maxWidth="lg"
-        >
-          <div className="space-y-5 text-sm">
-            <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 border border-slate-200">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-extrabold text-base">
-                  {selectedCustomer.name.charAt(0)}
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900">{selectedCustomer.name}</h3>
-                  <p className="text-xs text-slate-500">{selectedCustomer.email}</p>
-                </div>
-              </div>
-              <StatusBadge status={selectedCustomer.status} />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="p-3 rounded-xl border border-slate-200">
-                <span className="text-slate-400 font-bold uppercase block mb-1">Phone Number</span>
-                <span className="font-semibold text-slate-800">{selectedCustomer.phone}</span>
-              </div>
-              <div className="p-3 rounded-xl border border-slate-200">
-                <span className="text-slate-400 font-bold uppercase block mb-1">Total Lifetime Spent</span>
-                <span className="font-bold text-indigo-600 text-sm">
-                  ₹{Number(selectedCustomer.customerProfile?.totalSpent || 0)}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-              {selectedCustomer.status === 'ACTIVE' ? (
-                <button
-                  onClick={() => setIsDeactivateOpen(true)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 transition flex items-center gap-1.5"
-                >
-                  <Ban className="w-4 h-4" />
-                  <span>Suspend Account</span>
-                </button>
-              ) : (
-                <button
-                  onClick={() => {
-                    statusMutation.mutate({
-                      id: selectedCustomer.id,
-                      status: 'ACTIVE',
-                      reason: 'Reactivated by Super Admin',
-                    });
-                  }}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition flex items-center gap-1.5"
-                >
-                  <CheckCircle className="w-4 h-4" />
-                  <span>Reactivate Account</span>
-                </button>
-              )}
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {/* Suspend Customer Confirmation Modal */}
       {selectedCustomer && (
         <ConfirmModal
-          isOpen={isDeactivateOpen}
-          onClose={() => setIsDeactivateOpen(false)}
-          title={`Suspend Customer: ${selectedCustomer.name}`}
-          message="Are you sure you want to suspend this customer account? This will immediately revoke their active sessions and prevent new bookings."
-          confirmLabel="Suspend Customer"
+          isOpen={isDeleteOpen}
+          onClose={() => {
+            setIsDeleteOpen(false);
+            setSelectedCustomer(null);
+          }}
+          title={`Delete Customer: ${selectedCustomer.name || 'Unnamed customer'}`}
+          message={`This permanently deletes ${selectedCustomer.name || 'this customer'} (${selectedCustomer.phone || selectedCustomer.email}) from the database, including bookings, addresses, and login identity. They will be able to register again as a new customer.${
+            deleteMutation.isError
+              ? ` ${(deleteMutation.error as any)?.response?.data?.error?.message || 'Deletion failed. Please try again.'}`
+              : ''
+          }`}
+          confirmLabel="Delete Customer"
           isDestructive={true}
-          isLoading={statusMutation.isPending}
+          isLoading={deleteMutation.isPending}
           onConfirm={(reason) => {
-            statusMutation.mutate({
+            deleteMutation.mutate({
               id: selectedCustomer.id,
-              status: 'SUSPENDED',
               reason,
             });
           }}
         />
       )}
 
-      {/* Add Customer Modal */}
       <Modal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} title="Create New Customer">
         <form
           onSubmit={(e) => {
@@ -353,7 +487,7 @@ export const Customers: React.FC = () => {
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-              Phone Number
+              Mobile Number
             </label>
             <input
               type="tel"
