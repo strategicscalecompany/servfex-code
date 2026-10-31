@@ -148,6 +148,7 @@ export interface VendorProfile {
   warehouseLocation?: string | null;
   warehousePhone?: string | null;
   warehouseImageUrl?: string | null;
+  serviceRadiusKm?: number | null;
   createdAt: string;
   user?: User;
   employees?: EmployeeProfile[];
@@ -367,6 +368,12 @@ export interface Booking {
     id: string;
     user: { name: string; phone: string };
   };
+  helperEmployee?: {
+    id: string;
+    user: { name: string; phone: string };
+  } | null;
+  helperPayoutAmount?: string | number | null;
+  leadPayoutAmount?: string | number | null;
   address?: UserAddress;
   statusHistory?: BookingStatusHistory[];
 }

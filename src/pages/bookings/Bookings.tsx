@@ -370,7 +370,11 @@ export const Bookings: React.FC = () => {
                         {b.employee ? (
                           <div>
                             <span className="font-medium text-slate-900 block">{b.employee.user.name}</span>
-                            <span className="text-xs text-slate-500">{b.vendor?.companyName}</span>
+                            {b.helperEmployee?.user?.name ? (
+                              <span className="text-xs text-indigo-600 block">+ {b.helperEmployee.user.name}</span>
+                            ) : (
+                              <span className="text-xs text-slate-500">{b.vendor?.companyName}</span>
+                            )}
                           </div>
                         ) : b.vendor ? (
                           <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">

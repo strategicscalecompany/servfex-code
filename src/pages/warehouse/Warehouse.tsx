@@ -25,7 +25,16 @@ import {
   EyeOff,
   Wrench,
   ShieldCheck,
+  Radar,
 } from 'lucide-react';
+
+const COVERAGE_RADIUS_PRESETS_KM = [1, 2, 5, 10, 15];
+
+const parseCoverageRadiusKm = (value: string | number | null | undefined): number | null => {
+  const n = typeof value === 'number' ? value : Number.parseFloat(String(value ?? ''));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+};
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../api/client';
 import { hostMediaIfNeeded } from '../../api/upload';
@@ -105,11 +114,19 @@ const compressImage = (file: File, maxDimension = 1200, quality = 0.82): Promise
   });
 };
 
-const WarehouseMiniMap: React.FC<{ lat: number; lng: number; title: string }> = ({ lat, lng, title }) => {
+const WarehouseMiniMap: React.FC<{
+  lat: number;
+  lng: number;
+  title: string;
+  radiusKm?: number | null;
+}> = ({ lat, lng, title, radiusKm }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
   const markerRef = useRef<google.maps.Marker | null>(null);
+  const circleRef = useRef<google.maps.Circle | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const coverageMeters =
+    typeof radiusKm === 'number' && Number.isFinite(radiusKm) && radiusKm > 0 ? radiusKm * 1000 : 0;
 
   useEffect(() => {
     let isCancelled = false;
@@ -141,11 +158,42 @@ const WarehouseMiniMap: React.FC<{ lat: number; lng: number; title: string }> = 
           markerRef.current = marker;
         } else {
           mapInstanceRef.current.setCenter(position);
-          mapInstanceRef.current.setZoom(15);
           if (markerRef.current) {
             markerRef.current.setPosition(position);
             markerRef.current.setTitle(title || 'Warehouse Fulfillment Hub');
           }
+        }
+
+        const map = mapInstanceRef.current;
+        if (!map) return;
+
+        if (coverageMeters > 0) {
+          if (!circleRef.current) {
+            circleRef.current = new googleMaps.Circle({
+              map,
+              center: position,
+              radius: coverageMeters,
+              fillColor: '#4f46e5',
+              fillOpacity: 0.16,
+              strokeColor: '#4338ca',
+              strokeOpacity: 0.9,
+              strokeWeight: 2,
+              clickable: false,
+            });
+          } else {
+            circleRef.current.setCenter(position);
+            circleRef.current.setRadius(coverageMeters);
+            circleRef.current.setMap(map);
+          }
+          const bounds = circleRef.current.getBounds();
+          if (bounds) {
+            map.fitBounds(bounds, 28);
+          }
+        } else if (circleRef.current) {
+          circleRef.current.setMap(null);
+          circleRef.current = null;
+          map.setCenter(position);
+          map.setZoom(15);
         }
       })
       .catch(() => {
@@ -155,15 +203,20 @@ const WarehouseMiniMap: React.FC<{ lat: number; lng: number; title: string }> = 
     return () => {
       isCancelled = true;
     };
-  }, [lat, lng, title]);
+  }, [lat, lng, title, coverageMeters]);
 
   return (
-    <div className="relative w-full h-40 rounded-xl overflow-hidden border border-slate-200 shadow-2xs bg-slate-100">
+    <div className="relative w-full h-56 rounded-xl overflow-hidden border border-slate-200 shadow-2xs bg-slate-100">
       <div ref={mapContainerRef} className="w-full h-full" />
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-slate-100 text-slate-500 text-xs font-medium gap-2">
           <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
           <span>Loading Pinpoint Map...</span>
+        </div>
+      )}
+      {coverageMeters > 0 && (
+        <div className="absolute top-2 right-2 z-10 px-2 py-0.5 rounded-md bg-indigo-600 text-white text-[10px] font-bold shadow-md">
+          {radiusKm} km radius
         </div>
       )}
     </div>
@@ -203,6 +256,7 @@ export const Warehouse: React.FC = () => {
     category: 'HVAC & Appliance',
     latitude: null as number | null,
     longitude: null as number | null,
+    serviceRadiusKm: '',
   });
 
   const warehouseFileInputRef = useRef<HTMLInputElement>(null);
@@ -564,6 +618,7 @@ export const Warehouse: React.FC = () => {
         category: 'HVAC & Appliance',
         latitude: null,
         longitude: null,
+        serviceRadiusKm: '',
       });
       setGoogleMapsUrl('');
       setPinpointedCoords(null);
@@ -971,6 +1026,7 @@ export const Warehouse: React.FC = () => {
               warehouseImage: modalForm.warehouseImage,
               latitude: pinpointedCoords?.lat ?? modalForm.latitude,
               longitude: pinpointedCoords?.lng ?? modalForm.longitude,
+              serviceRadiusKm: parseCoverageRadiusKm(modalForm.serviceRadiusKm) ?? undefined,
             });
           }}
           className="space-y-4"
@@ -1043,11 +1099,63 @@ export const Warehouse: React.FC = () => {
               {urlResolveError && <p className="text-xs text-rose-600 font-medium">{urlResolveError}</p>}
 
               {pinpointedCoords && (
-                <WarehouseMiniMap
-                  lat={pinpointedCoords.lat}
-                  lng={pinpointedCoords.lng}
-                  title={modalForm.warehouseName || 'Warehouse Depot'}
-                />
+                <div className="space-y-2.5">
+                  <div className="bg-indigo-50/60 border border-indigo-100 rounded-xl p-3 space-y-2">
+                    <label
+                      htmlFor="warehouse-service-radius-km-input"
+                      className="text-[11px] font-bold uppercase tracking-wider text-indigo-950 flex items-center gap-1.5"
+                    >
+                      <Radar className="w-3.5 h-3.5 text-indigo-600" />
+                      Service Coverage Radius (km) *
+                    </label>
+                    <div className="relative">
+                      <input
+                        id="warehouse-service-radius-km-input"
+                        name="serviceRadiusKm"
+                        type="number"
+                        min={0.1}
+                        max={200}
+                        step={0.1}
+                        required
+                        placeholder="e.g. 1"
+                        value={modalForm.serviceRadiusKm}
+                        onChange={(e) => setModalForm({ ...modalForm, serviceRadiusKm: e.target.value })}
+                        className="w-full p-2.5 pr-12 rounded-xl border border-indigo-200 text-sm outline-none focus:border-indigo-500 bg-white"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">
+                        km
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {COVERAGE_RADIUS_PRESETS_KM.map((km) => {
+                        const isSelected = parseCoverageRadiusKm(modalForm.serviceRadiusKm) === km;
+                        return (
+                          <button
+                            key={km}
+                            type="button"
+                            onClick={() => setModalForm({ ...modalForm, serviceRadiusKm: String(km) })}
+                            className={
+                              isSelected
+                                ? 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-600 text-white shadow-xs'
+                                : 'px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white text-slate-600 border border-slate-200 hover:border-indigo-300 hover:text-indigo-700'
+                            }
+                          >
+                            {km} km
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Enter the coverage in kilometres. A value of 1 draws a 1 km circle around this warehouse pin.
+                    </p>
+                  </div>
+                  <WarehouseMiniMap
+                    lat={pinpointedCoords.lat}
+                    lng={pinpointedCoords.lng}
+                    title={modalForm.warehouseName || 'Warehouse Depot'}
+                    radiusKm={parseCoverageRadiusKm(modalForm.serviceRadiusKm)}
+                  />
+                </div>
               )}
             </div>
 
