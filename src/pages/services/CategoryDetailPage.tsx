@@ -535,24 +535,29 @@ const AssignModal: React.FC<{
   const [serviceId, setServiceId] = useState(preselectedServiceId || '');
   const [vendorId, setVendorId] = useState('');
   const [customPrice, setCustomPrice] = useState('');
-  const [availability, setAvailability] = useState('Mon-Sat: 09:00 - 18:00');
   const [error, setError] = useState<string | null>(null);
+
+  const resolveBasePrice = (id: string) => {
+    const match = allServices.find((s: any) => s.id === id);
+    const price = Number(match?.startingPrice);
+    return Number.isFinite(price) && price > 0 ? String(price) : '';
+  };
 
   React.useEffect(() => {
     if (isOpen) {
-      setServiceId(preselectedServiceId || '');
+      const nextId = preselectedServiceId || '';
+      setServiceId(nextId);
       setVendorId('');
-      setCustomPrice('');
+      setCustomPrice(nextId ? resolveBasePrice(nextId) : '');
       setError(null);
     }
-  }, [isOpen, preselectedServiceId]);
+  }, [isOpen, preselectedServiceId, allServices]);
 
   const assignMutation = useMutation({
     mutationFn: async () => {
       await apiClient.post(`/admin/vendors/${vendorId}/services`, {
         serviceId,
         customPrice: customPrice ? parseFloat(customPrice) : null,
-        availability,
         isActive: true,
       });
     },
@@ -589,7 +594,11 @@ const AssignModal: React.FC<{
           <select
             required
             value={serviceId}
-            onChange={(e) => setServiceId(e.target.value)}
+            onChange={(e) => {
+              const nextId = e.target.value;
+              setServiceId(nextId);
+              setCustomPrice(nextId ? resolveBasePrice(nextId) : '');
+            }}
             className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:border-indigo-500"
           >
             <option value="">— Choose a Service —</option>
@@ -618,29 +627,19 @@ const AssignModal: React.FC<{
           </select>
         </div>
         <div>
-          <label className="block text-xs font-semibold text-gray-700 mb-1">
-            Custom Price (₹) — Optional
-          </label>
+          <label className="block text-xs font-semibold text-gray-700 mb-1">Price (₹)</label>
           <input
             type="number"
             min="0"
             step="0.01"
             value={customPrice}
             onChange={(e) => setCustomPrice(e.target.value)}
-            placeholder="Leave blank for catalog base price"
+            placeholder="Auto-filled from service base price"
             className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:border-indigo-500"
           />
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-gray-700 mb-1">
-            Availability Schedule
-          </label>
-          <input
-            value={availability}
-            onChange={(e) => setAvailability(e.target.value)}
-            placeholder="Mon-Sat: 09:00 - 18:00"
-            className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:border-indigo-500"
-          />
+          <p className="mt-1 text-[11px] text-gray-500">
+            Prefills from the service&apos;s starting price. Edit only if this partner needs a different amount.
+          </p>
         </div>
         <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
           <button

@@ -2466,7 +2466,6 @@ export const Services: React.FC = () => {
   const [assignServiceId, setAssignServiceId] = useState('');
   const [assignVendorId, setAssignVendorId] = useState('');
   const [assignCustomPrice, setAssignCustomPrice] = useState('');
-  const [assignAvailability, setAssignAvailability] = useState('Mon-Sat: 09:00 - 18:00');
   const [assignError, setAssignError] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
@@ -2523,7 +2522,6 @@ export const Services: React.FC = () => {
       await apiClient.post(`/admin/vendors/${assignVendorId}/services`, {
         serviceId: assignServiceId,
         customPrice: assignCustomPrice ? parseFloat(assignCustomPrice) : null,
-        availability: assignAvailability,
         isActive: true,
       });
     },
@@ -2542,6 +2540,20 @@ export const Services: React.FC = () => {
 
   const services: Service[] = data?.data ?? [];
   const pagination = data?.pagination;
+
+  const catalogForAssign = (allServicesData.length > 0 ? allServicesData : services) as Service[];
+  const resolveAssignBasePrice = (serviceId: string) => {
+    const match = catalogForAssign.find((s) => s.id === serviceId);
+    const price = Number(match?.startingPrice);
+    return Number.isFinite(price) && price > 0 ? String(price) : '';
+  };
+  const openAssignModal = (serviceId = '') => {
+    setAssignServiceId(serviceId);
+    setAssignVendorId('');
+    setAssignCustomPrice(serviceId ? resolveAssignBasePrice(serviceId) : '');
+    setAssignError(null);
+    setIsAssignOpen(true);
+  };
 
   const filteredCategories = categories.filter((c) => {
     const q = categorySearch.toLowerCase().trim();
@@ -2570,7 +2582,7 @@ export const Services: React.FC = () => {
         </div>
         <div className="flex items-center gap-2.5">
           <button
-            onClick={() => { setAssignServiceId(''); setAssignVendorId(''); setAssignError(null); setIsAssignOpen(true); }}
+            onClick={() => openAssignModal()}
             className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition"
           >
             <UserCheck className="w-4 h-4" /> Assign to Partner
@@ -2895,7 +2907,7 @@ export const Services: React.FC = () => {
                           </button>
                           <div className="flex items-center gap-1.5 w-full justify-end">
                             <button
-                              onClick={() => { setAssignServiceId(service.id); setIsAssignOpen(true); }}
+                              onClick={() => openAssignModal(service.id)}
                               className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition"
                               title="Assign to Partner"
                             >
@@ -2963,7 +2975,7 @@ export const Services: React.FC = () => {
             onSelectCategory={(cat) => setSelectedCategoryId(cat.id)}
             onSelectService={(s) => setPreviewServiceId(s.id)}
             onManagePackages={(s) => setPackagesService(s)}
-            onAssignService={(s) => { setAssignServiceId(s.id); setIsAssignOpen(true); }}
+            onAssignService={(s) => openAssignModal(s.id)}
           />
         </div>
       </div>
@@ -3092,10 +3104,18 @@ export const Services: React.FC = () => {
           )}
           <div>
             <label className="label-xs">Select Catalog Service *</label>
-            <select required value={assignServiceId} onChange={(e) => setAssignServiceId(e.target.value)}
-              className="input-sm w-full">
+            <select
+              required
+              value={assignServiceId}
+              onChange={(e) => {
+                const nextId = e.target.value;
+                setAssignServiceId(nextId);
+                setAssignCustomPrice(nextId ? resolveAssignBasePrice(nextId) : '');
+              }}
+              className="input-sm w-full"
+            >
               <option value="">— Choose a Service —</option>
-              {(allServicesData.length > 0 ? allServicesData : services).map((s: any) => (
+              {catalogForAssign.map((s: any) => (
                 <option key={s.id} value={s.id}>
                   {s.name} {s.category?.name ? `[${s.category.name}]` : ''}
                 </option>
@@ -3115,15 +3135,19 @@ export const Services: React.FC = () => {
             </select>
           </div>
           <div>
-            <label className="label-xs">Custom Price (₹) — Optional</label>
-            <input type="number" min="0" step="0.01" value={assignCustomPrice}
+            <label className="label-xs">Price (₹)</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={assignCustomPrice}
               onChange={(e) => setAssignCustomPrice(e.target.value)}
-              placeholder="Leave blank for catalog base price" className="input-sm w-full" />
-          </div>
-          <div>
-            <label className="label-xs">Availability Schedule</label>
-            <input value={assignAvailability} onChange={(e) => setAssignAvailability(e.target.value)}
-              placeholder="Mon-Sat: 09:00 - 18:00" className="input-sm w-full" />
+              placeholder="Auto-filled from service base price"
+              className="input-sm w-full"
+            />
+            <p className="mt-1 text-[11px] text-gray-500">
+              Prefills from the service&apos;s starting price. Edit here only if this partner needs a different amount.
+            </p>
           </div>
           <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
             <button type="button" onClick={() => { setIsAssignOpen(false); setAssignError(null); }}
