@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Check, Search, Users, Layers, IndianRupee } from 'lucide-react';
 import { apiClient } from '../../api/client';
@@ -29,6 +29,8 @@ type Props = {
   onAssigned?: () => void;
 };
 
+const EMPTY_IDS: string[] = [];
+
 const basePriceOf = (service?: AssignableService | null): string => {
   const price = Number(service?.startingPrice);
   return Number.isFinite(price) && price > 0 ? String(price) : '';
@@ -39,8 +41,8 @@ export const AssignServicesToPartnersModal: React.FC<Props> = ({
   onClose,
   services,
   partners,
-  preselectedServiceIds = [],
-  preselectedPartnerIds = [],
+  preselectedServiceIds = EMPTY_IDS,
+  preselectedPartnerIds = EMPTY_IDS,
   onAssigned,
 }) => {
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
@@ -49,15 +51,31 @@ export const AssignServicesToPartnersModal: React.FC<Props> = ({
   const [serviceQuery, setServiceQuery] = useState('');
   const [partnerQuery, setPartnerQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const wasOpenRef = useRef(false);
+  const servicesRef = useRef(services);
+  const preselectedServiceIdsRef = useRef(preselectedServiceIds);
+  const preselectedPartnerIdsRef = useRef(preselectedPartnerIds);
 
+  servicesRef.current = services;
+  preselectedServiceIdsRef.current = preselectedServiceIds;
+  preselectedPartnerIdsRef.current = preselectedPartnerIds;
+
+  // Initialize selection only when the modal transitions closed → open.
+  // Avoid depending on array props (new references every parent render).
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      wasOpenRef.current = false;
+      return;
+    }
+    if (wasOpenRef.current) return;
+    wasOpenRef.current = true;
 
-    const initialIds = [...new Set(preselectedServiceIds.filter(Boolean))];
-    const initialPartnerIds = [...new Set(preselectedPartnerIds.filter(Boolean))];
+    const catalog = servicesRef.current;
+    const initialIds = [...new Set((preselectedServiceIdsRef.current || EMPTY_IDS).filter(Boolean))];
+    const initialPartnerIds = [...new Set((preselectedPartnerIdsRef.current || EMPTY_IDS).filter(Boolean))];
     const nextPrices: Record<string, string> = {};
     for (const id of initialIds) {
-      nextPrices[id] = basePriceOf(services.find((s) => s.id === id));
+      nextPrices[id] = basePriceOf(catalog.find((s) => s.id === id));
     }
 
     setSelectedServiceIds(initialIds);
@@ -66,7 +84,26 @@ export const AssignServicesToPartnersModal: React.FC<Props> = ({
     setServiceQuery('');
     setPartnerQuery('');
     setError(null);
-  }, [isOpen, preselectedServiceIds, preselectedPartnerIds, services]);
+  }, [isOpen]);
+
+  // If catalog arrives after open, fill any missing base prices once.
+  useEffect(() => {
+    if (!isOpen || selectedServiceIds.length === 0 || services.length === 0) return;
+    setPriceByServiceId((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const id of selectedServiceIds) {
+        if (!next[id]) {
+          const filled = basePriceOf(services.find((s) => s.id === id));
+          if (filled) {
+            next[id] = filled;
+            changed = true;
+          }
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [isOpen, selectedServiceIds, services]);
 
   const filteredServices = useMemo(() => {
     const q = serviceQuery.trim().toLowerCase();
