@@ -6,6 +6,7 @@ import { hostMediaIfNeeded, hostMediaList } from '../../api/upload';
 import { Service, ServiceCategory, ServiceSubCategory, ServicePackage } from '../../types';
 import { Modal } from '../../components/common/Modal';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
+import { AssignServicesToPartnersModal } from '../../components/services/AssignServicesToPartnersModal';
 import {
   Home,
   Sparkles,
@@ -2461,12 +2462,9 @@ export const Services: React.FC = () => {
     },
   });
 
-  // Assign to vendor modal
+  // Assign to vendor modal (multi service × multi partner)
   const [isAssignOpen, setIsAssignOpen] = useState(false);
-  const [assignServiceId, setAssignServiceId] = useState('');
-  const [assignVendorId, setAssignVendorId] = useState('');
-  const [assignCustomPrice, setAssignCustomPrice] = useState('');
-  const [assignError, setAssignError] = useState<string | null>(null);
+  const [assignPreselectedServiceIds, setAssignPreselectedServiceIds] = useState<string[]>([]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['services', search, categoryFilter, page, pageSize],
@@ -2517,41 +2515,12 @@ export const Services: React.FC = () => {
     },
   });
 
-  const assignMutation = useMutation({
-    mutationFn: async () => {
-      await apiClient.post(`/admin/vendors/${assignVendorId}/services`, {
-        serviceId: assignServiceId,
-        customPrice: assignCustomPrice ? parseFloat(assignCustomPrice) : null,
-        isActive: true,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['services'] });
-      setIsAssignOpen(false);
-      setAssignServiceId('');
-      setAssignVendorId('');
-      setAssignCustomPrice('');
-      setAssignError(null);
-    },
-    onError: (err: any) => {
-      setAssignError(err.response?.data?.message || err.message || 'Failed to assign service');
-    },
-  });
-
   const services: Service[] = data?.data ?? [];
   const pagination = data?.pagination;
 
   const catalogForAssign = (allServicesData.length > 0 ? allServicesData : services) as Service[];
-  const resolveAssignBasePrice = (serviceId: string) => {
-    const match = catalogForAssign.find((s) => s.id === serviceId);
-    const price = Number(match?.startingPrice);
-    return Number.isFinite(price) && price > 0 ? String(price) : '';
-  };
   const openAssignModal = (serviceId = '') => {
-    setAssignServiceId(serviceId);
-    setAssignVendorId('');
-    setAssignCustomPrice(serviceId ? resolveAssignBasePrice(serviceId) : '');
-    setAssignError(null);
+    setAssignPreselectedServiceIds(serviceId ? [serviceId] : []);
     setIsAssignOpen(true);
   };
 
@@ -3082,85 +3051,24 @@ export const Services: React.FC = () => {
         danger
       />
 
-      {/* Assign to Partner Modal */}
-      <Modal
+      {/* Assign to Partner Modal — multi service × multi partner */}
+      <AssignServicesToPartnersModal
         isOpen={isAssignOpen}
-        onClose={() => { setIsAssignOpen(false); setAssignError(null); }}
-        title="Assign Service to Partner"
-      >
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!assignServiceId || !assignVendorId) {
-              setAssignError('Please select both a service and a partner.');
-              return;
-            }
-            assignMutation.mutate();
-          }}
-          className="space-y-4"
-        >
-          {assignError && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{assignError}</div>
-          )}
-          <div>
-            <label className="label-xs">Select Catalog Service *</label>
-            <select
-              required
-              value={assignServiceId}
-              onChange={(e) => {
-                const nextId = e.target.value;
-                setAssignServiceId(nextId);
-                setAssignCustomPrice(nextId ? resolveAssignBasePrice(nextId) : '');
-              }}
-              className="input-sm w-full"
-            >
-              <option value="">— Choose a Service —</option>
-              {catalogForAssign.map((s: any) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} {s.category?.name ? `[${s.category.name}]` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="label-xs">Select Partner *</label>
-            <select required value={assignVendorId} onChange={(e) => setAssignVendorId(e.target.value)}
-              className="input-sm w-full">
-              <option value="">— Choose Partner —</option>
-              {vendorsData.map((v: any) => (
-                <option key={v.id} value={v.id}>
-                  {v.companyName} ({v.location})
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="label-xs">Price (₹)</label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={assignCustomPrice}
-              onChange={(e) => setAssignCustomPrice(e.target.value)}
-              placeholder="Auto-filled from service base price"
-              className="input-sm w-full"
-            />
-            <p className="mt-1 text-[11px] text-gray-500">
-              Prefills from the service&apos;s starting price. Edit here only if this partner needs a different amount.
-            </p>
-          </div>
-          <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
-            <button type="button" onClick={() => { setIsAssignOpen(false); setAssignError(null); }}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
-              Cancel
-            </button>
-            <button type="submit" disabled={assignMutation.isPending || !assignServiceId || !assignVendorId}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold disabled:opacity-60 transition">
-              {assignMutation.isPending ? 'Assigning…' : 'Assign Service'}
-            </button>
-          </div>
-        </form>
-      </Modal>
+        onClose={() => {
+          setIsAssignOpen(false);
+          setAssignPreselectedServiceIds([]);
+        }}
+        services={catalogForAssign}
+        partners={vendorsData}
+        preselectedServiceIds={assignPreselectedServiceIds}
+        onAssigned={() => {
+          queryClient.invalidateQueries({ queryKey: ['services'] });
+          queryClient.invalidateQueries({ queryKey: ['vendors'] });
+          queryClient.invalidateQueries({ queryKey: ['vendors-list-selector'] });
+          queryClient.invalidateQueries({ queryKey: ['vendor-detail'] });
+          queryClient.invalidateQueries({ queryKey: ['all-catalog-services-list'] });
+        }}
+      />
     </div>
   );
 };

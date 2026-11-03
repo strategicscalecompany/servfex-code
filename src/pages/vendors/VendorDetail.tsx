@@ -8,6 +8,7 @@ import { StatusBadge } from '../../components/common/StatusBadge';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
 import { Modal } from '../../components/common/Modal';
 import { VendorLocationMap } from '../../components/vendors/VendorLocationMap';
+import { AssignServicesToPartnersModal } from '../../components/services/AssignServicesToPartnersModal';
 import {
   ArrowLeft,
   Briefcase,
@@ -37,6 +38,7 @@ import {
   Warehouse,
   Eye,
   ChevronDown,
+  UserCheck,
 } from 'lucide-react';
 
 export const VendorDetail: React.FC = () => {
@@ -49,6 +51,7 @@ export const VendorDetail: React.FC = () => {
   const [isRejectOpen, setIsRejectOpen] = useState(false);
   const [isSuspendOpen, setIsSuspendOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
   const [previewDoc, setPreviewDoc] = useState<{ title: string; fileUrl: string; type?: string } | null>(null);
 
@@ -64,6 +67,14 @@ export const VendorDetail: React.FC = () => {
       return res.data?.data;
     },
     enabled: !!id,
+  });
+
+  const { data: catalogServices = [] } = useQuery({
+    queryKey: ['all-catalog-services-list'],
+    queryFn: async () => {
+      const res = await apiClient.get('/admin/services?limit=100');
+      return res.data?.data || [];
+    },
   });
 
   // Fetch Vendor Bookings History
@@ -943,17 +954,33 @@ export const VendorDetail: React.FC = () => {
                 Catalog services assigned to and fulfilled by this service partner.
               </p>
             </div>
+            <button
+              type="button"
+              onClick={() => setIsAssignOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition shadow-xs"
+            >
+              <UserCheck className="w-3.5 h-3.5" />
+              Assign Services
+            </button>
           </div>
 
           {services.length === 0 ? (
             <div className="py-12 text-center text-slate-400 space-y-3">
               <Wrench className="w-8 h-8 text-slate-300 mx-auto" />
               <div>
-                <p className="text-sm font-semibold text-slate-600">No services enabled</p>
+                <p className="text-sm font-semibold text-slate-600">No services assigned yet</p>
                 <p className="text-xs text-slate-400 mt-0.5 max-w-sm mx-auto">
-                  This partner has not been assigned any catalog services yet. Assign services from the platform Service Catalog.
+                  Assign catalog services to this partner here, or from the platform Service Catalog.
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={() => setIsAssignOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Assign from Catalog
+              </button>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -961,9 +988,9 @@ export const VendorDetail: React.FC = () => {
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     <th className="py-3 px-4">Service Name</th>
+                    <th className="py-3 px-4">Category</th>
                     <th className="py-3 px-4">Base Starting Price</th>
                     <th className="py-3 px-4">Custom Partner Price</th>
-                    <th className="py-3 px-4">Availability</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
@@ -974,14 +1001,14 @@ export const VendorDetail: React.FC = () => {
                       <td className="py-3 px-4 font-bold text-slate-900">
                         {vs.service?.name || 'Service Item'}
                       </td>
+                      <td className="py-3 px-4 text-slate-600">
+                        {vs.service?.category?.name || '—'}
+                      </td>
                       <td className="py-3 px-4 font-medium text-slate-600">
                         ₹{Number(vs.service?.startingPrice || 0)}
                       </td>
                       <td className="py-3 px-4 font-bold text-indigo-600">
                         {vs.customPrice ? `₹${Number(vs.customPrice)}` : 'Uses Base Price'}
-                      </td>
-                      <td className="py-3 px-4 text-slate-600">
-                        {vs.availability}
                       </td>
                       <td className="py-3 px-4">
                         <button
@@ -1345,7 +1372,26 @@ export const VendorDetail: React.FC = () => {
         </Modal>
       )}
 
-
+      {vendor && (
+        <AssignServicesToPartnersModal
+          isOpen={isAssignOpen}
+          onClose={() => setIsAssignOpen(false)}
+          services={catalogServices}
+          partners={[
+            {
+              id: vendor.id,
+              companyName: vendor.companyName,
+              location: vendor.location,
+            },
+          ]}
+          preselectedPartnerIds={[vendor.id]}
+          onAssigned={() => {
+            queryClient.invalidateQueries({ queryKey: ['vendor-detail', id] });
+            queryClient.invalidateQueries({ queryKey: ['vendors'] });
+            queryClient.invalidateQueries({ queryKey: ['vendors-list-selector'] });
+          }}
+        />
+      )}
     </div>
   );
 };

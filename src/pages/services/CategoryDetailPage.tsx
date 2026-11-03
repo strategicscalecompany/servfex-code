@@ -27,6 +27,7 @@ import { apiClient } from '../../api/client';
 import { hostMediaIfNeeded } from '../../api/upload';
 import { ServiceCategory, ServiceSubCategory, ServicePackage } from '../../types';
 import { Modal } from '../../components/common/Modal';
+import { AssignServicesToPartnersModal } from '../../components/services/AssignServicesToPartnersModal';
 import { PackageFormModal } from './PackageFormModal';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -523,145 +524,6 @@ const SubCategoryForm: React.FC<{
   );
 };
 
-// ─── Assign to Partner Modal Form ─────────────────────────────────────────────
-
-const AssignModal: React.FC<{
-  isOpen: boolean;
-  onClose: () => void;
-  preselectedServiceId?: string;
-  allServices: any[];
-  vendors: any[];
-}> = ({ isOpen, onClose, preselectedServiceId, allServices, vendors }) => {
-  const [serviceId, setServiceId] = useState(preselectedServiceId || '');
-  const [vendorId, setVendorId] = useState('');
-  const [customPrice, setCustomPrice] = useState('');
-  const [error, setError] = useState<string | null>(null);
-
-  const resolveBasePrice = (id: string) => {
-    const match = allServices.find((s: any) => s.id === id);
-    const price = Number(match?.startingPrice);
-    return Number.isFinite(price) && price > 0 ? String(price) : '';
-  };
-
-  React.useEffect(() => {
-    if (isOpen) {
-      const nextId = preselectedServiceId || '';
-      setServiceId(nextId);
-      setVendorId('');
-      setCustomPrice(nextId ? resolveBasePrice(nextId) : '');
-      setError(null);
-    }
-  }, [isOpen, preselectedServiceId, allServices]);
-
-  const assignMutation = useMutation({
-    mutationFn: async () => {
-      await apiClient.post(`/admin/vendors/${vendorId}/services`, {
-        serviceId,
-        customPrice: customPrice ? parseFloat(customPrice) : null,
-        isActive: true,
-      });
-    },
-    onSuccess: () => {
-      onClose();
-    },
-    onError: (err: any) => {
-      setError(err.response?.data?.error?.message || err.message || 'Failed to assign service');
-    },
-  });
-
-  return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Assign Service to Partner">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!serviceId || !vendorId) {
-            setError('Please select both a service and a partner.');
-            return;
-          }
-          assignMutation.mutate();
-        }}
-        className="space-y-4"
-      >
-        {error && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
-            {error}
-          </div>
-        )}
-        <div>
-          <label className="block text-xs font-semibold text-gray-700 mb-1">
-            Select Catalog Service *
-          </label>
-          <select
-            required
-            value={serviceId}
-            onChange={(e) => {
-              const nextId = e.target.value;
-              setServiceId(nextId);
-              setCustomPrice(nextId ? resolveBasePrice(nextId) : '');
-            }}
-            className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:border-indigo-500"
-          >
-            <option value="">— Choose a Service —</option>
-            {allServices.map((s: any) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-                {s.category?.name ? ` [${s.category.name}]` : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-gray-700 mb-1">Select Partner *</label>
-          <select
-            required
-            value={vendorId}
-            onChange={(e) => setVendorId(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:border-indigo-500"
-          >
-            <option value="">— Choose Partner —</option>
-            {vendors.map((v: any) => (
-              <option key={v.id} value={v.id}>
-                {v.companyName} ({v.location})
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-gray-700 mb-1">Price (₹)</label>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={customPrice}
-            onChange={(e) => setCustomPrice(e.target.value)}
-            placeholder="Auto-filled from service base price"
-            className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:border-indigo-500"
-          />
-          <p className="mt-1 text-[11px] text-gray-500">
-            Prefills from the service&apos;s starting price. Edit only if this partner needs a different amount.
-          </p>
-        </div>
-        <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={assignMutation.isPending || !serviceId || !vendorId}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold disabled:opacity-60 transition"
-          >
-            {assignMutation.isPending ? 'Assigning…' : 'Assign Service'}
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
-};
-
 // ─── Sub-Category Tile ────────────────────────────────────────────────────────
 
 interface PackageSectionGroup {
@@ -1051,13 +913,20 @@ const SubCategoryTile: React.FC<{
         }}
       />
 
-      {/* Assign Modal */}
-      <AssignModal
+      {/* Assign Modal — multi service × multi partner */}
+      <AssignServicesToPartnersModal
         isOpen={assignOpen}
         onClose={() => setAssignOpen(false)}
-        preselectedServiceId={assignServiceId}
-        allServices={allServices}
-        vendors={vendors}
+        services={allServices}
+        partners={vendors}
+        preselectedServiceIds={assignServiceId ? [assignServiceId] : []}
+        onAssigned={() => {
+          queryClient.invalidateQueries({ queryKey: ['category-services'] });
+          queryClient.invalidateQueries({ queryKey: ['all-catalog-services-list'] });
+          queryClient.invalidateQueries({ queryKey: ['vendors'] });
+          queryClient.invalidateQueries({ queryKey: ['vendors-list-selector'] });
+          queryClient.invalidateQueries({ queryKey: ['vendor-detail'] });
+        }}
       />
     </div>
   );
