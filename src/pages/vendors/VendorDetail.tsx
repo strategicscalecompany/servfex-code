@@ -39,7 +39,16 @@ import {
   Eye,
   ChevronDown,
   UserCheck,
+  Radar,
 } from 'lucide-react';
+
+const COVERAGE_RADIUS_PRESETS_KM = [1, 2, 5, 10, 15, 25];
+
+const parseCoverageRadiusKm = (value: string | number | null | undefined): number | null => {
+  const n = typeof value === 'number' ? value : Number.parseFloat(String(value ?? ''));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+};
 
 export const VendorDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -54,6 +63,8 @@ export const VendorDetail: React.FC = () => {
   const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
   const [previewDoc, setPreviewDoc] = useState<{ title: string; fileUrl: string; type?: string } | null>(null);
+  const [radiusKmInput, setRadiusKmInput] = useState('');
+  const [radiusSaveError, setRadiusSaveError] = useState<string | null>(null);
 
   // Fetch Vendor Full Profile
   const {
@@ -211,6 +222,29 @@ export const VendorDetail: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vendor-detail', id] });
+    },
+  });
+
+  React.useEffect(() => {
+    if (vendor?.serviceRadiusKm != null && Number.isFinite(Number(vendor.serviceRadiusKm))) {
+      setRadiusKmInput(String(vendor.serviceRadiusKm));
+    }
+  }, [vendor?.id, vendor?.serviceRadiusKm]);
+
+  const updateRadiusMutation = useMutation({
+    mutationFn: async (serviceRadiusKm: number) => {
+      return apiClient.patch(`/admin/vendors/${id}`, {
+        serviceRadiusKm,
+        reason: 'Updated hub service coverage radius',
+      });
+    },
+    onSuccess: () => {
+      setRadiusSaveError(null);
+      queryClient.invalidateQueries({ queryKey: ['vendor-detail', id] });
+      queryClient.invalidateQueries({ queryKey: ['vendors'] });
+    },
+    onError: (err: any) => {
+      setRadiusSaveError(err?.response?.data?.error?.message || err?.message || 'Failed to update radius');
     },
   });
 
@@ -623,6 +657,81 @@ export const VendorDetail: React.FC = () => {
               initialLng={vendor.longitude}
             />
 
+            <div className="pt-2 border-t border-slate-100 space-y-3">
+              <label className="text-[11px] font-bold uppercase text-slate-400 flex items-center gap-1.5">
+                <Radar className="w-3.5 h-3.5 text-indigo-600" />
+                Service Coverage Radius (km)
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                <div className="relative flex-1">
+                  <input
+                    type="number"
+                    min={0.1}
+                    max={200}
+                    step={0.1}
+                    value={radiusKmInput}
+                    onChange={(e) => setRadiusKmInput(e.target.value)}
+                    placeholder="e.g. 5"
+                    className="w-full p-2.5 pr-12 rounded-xl border border-slate-200 text-sm outline-none focus:border-indigo-500 bg-white"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">
+                    km
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  disabled={updateRadiusMutation.isPending}
+                  onClick={() => {
+                    const parsed = parseCoverageRadiusKm(radiusKmInput);
+                    if (parsed == null) {
+                      setRadiusSaveError('Enter a valid radius greater than 0 km');
+                      return;
+                    }
+                    updateRadiusMutation.mutate(parsed);
+                  }}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 disabled:opacity-60"
+                >
+                  {updateRadiusMutation.isPending ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5" />
+                  )}
+                  Save radius
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {COVERAGE_RADIUS_PRESETS_KM.map((km) => {
+                  const isSelected = parseCoverageRadiusKm(radiusKmInput) === km;
+                  return (
+                    <button
+                      key={km}
+                      type="button"
+                      onClick={() => setRadiusKmInput(String(km))}
+                      className={
+                        isSelected
+                          ? 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-600 text-white shadow-xs'
+                          : 'px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white text-slate-600 border border-slate-200 hover:border-indigo-300 hover:text-indigo-700'
+                      }
+                    >
+                      {km} km
+                    </button>
+                  );
+                })}
+              </div>
+              {radiusSaveError && (
+                <p className="text-xs text-rose-600 font-medium">{radiusSaveError}</p>
+              )}
+              {!radiusSaveError && updateRadiusMutation.isSuccess && (
+                <p className="text-xs text-emerald-600 font-medium">Coverage radius updated.</p>
+              )}
+              <p className="text-[11px] text-slate-500">
+                Customers outside this radius see out-of-area. Current:{' '}
+                <span className="font-semibold text-slate-700">
+                  {vendor.serviceRadiusKm != null ? `${vendor.serviceRadiusKm} km` : 'default 15 km'}
+                </span>
+              </p>
+            </div>
+
             {vendor.bio && (
               <div className="pt-2 border-t border-slate-100">
                 <span className="text-[11px] font-bold uppercase text-slate-400 block mb-1">Company Bio / Area Coverage</span>
@@ -1011,19 +1120,29 @@ export const VendorDetail: React.FC = () => {
                         {vs.customPrice ? `₹${Number(vs.customPrice)}` : 'Uses Base Price'}
                       </td>
                       <td className="py-3 px-4">
-                        <button
-                          type="button"
-                          onClick={() => toggleServiceStatusMutation.mutate({ serviceId: vs.serviceId, isActive: !vs.isActive })}
-                          disabled={toggleServiceStatusMutation.isPending}
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold transition ${
-                            vs.isActive
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}
-                          title="Click to toggle status"
-                        >
-                          {vs.isActive ? 'Active' : 'Disabled'}
-                        </button>
+                        <div className="flex flex-col items-start gap-1">
+                          <button
+                            type="button"
+                            onClick={() => toggleServiceStatusMutation.mutate({ serviceId: vs.serviceId, isActive: !vs.isActive })}
+                            disabled={toggleServiceStatusMutation.isPending}
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold transition ${
+                              vs.isActive
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                            title="Click to toggle partner assignment status"
+                          >
+                            {vs.isActive ? 'Assigned Active' : 'Assigned Off'}
+                          </button>
+                          {vs.service && vs.service.isActive === false && (
+                            <span
+                              className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200"
+                              title="This catalog service is inactive, so customers will not see it even though it is assigned to this warehouse"
+                            >
+                              Hidden in app (catalog inactive)
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-right">
                         <button

@@ -192,10 +192,16 @@ export const AssignServicesToPartnersModal: React.FC<Props> = ({
         for (const serviceId of selectedServiceIds) {
           const raw = priceByServiceId[serviceId];
           const parsed = raw != null && String(raw).trim() !== '' ? Number(raw) : NaN;
+          const catalogBase = Number(services.find((s) => s.id === serviceId)?.startingPrice);
+          // Keep live catalog pricing unless admin sets a true hub-specific override.
+          const isHubOverride =
+            Number.isFinite(parsed) &&
+            Number.isFinite(catalogBase) &&
+            Math.abs(parsed - catalogBase) > 0.009;
           tasks.push(
             apiClient.post(`/admin/vendors/${partnerId}/services`, {
               serviceId,
-              customPrice: Number.isFinite(parsed) ? parsed : null,
+              customPrice: isHubOverride ? parsed : null,
               isActive: true,
             })
           );
