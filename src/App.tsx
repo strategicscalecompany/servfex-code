@@ -22,6 +22,7 @@ import { SupportInbox } from './pages/support/SupportInbox';
 import { Warehouse } from './pages/warehouse/Warehouse';
 import { Services } from './pages/services/Services';
 import { CategoryDetailPage } from './pages/services/CategoryDetailPage';
+import { TagsPage } from './pages/tags/Tags';
 import { Categories } from './pages/categories/Categories';
 import { Payments } from './pages/payments/Payments';
 import { Reviews } from './pages/reviews/Reviews';
@@ -103,6 +104,7 @@ export const App: React.FC = () => {
                 <Route path="our-app/home" element={<AppHome />} />
                 <Route path="our-app/services" element={<Services />} />
                 <Route path="our-app/services/:categoryId" element={<CategoryDetailPage />} />
+                <Route path="our-app/tags" element={<TagsPage />} />
                 <Route path="our-app/telemetry" element={<OurApp />} />
                 
                 {/* Legacy route redirects */}

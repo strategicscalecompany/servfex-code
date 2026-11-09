@@ -25,6 +25,7 @@ import {
   Activity,
   Home,
   Sparkles,
+  Tags,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useBookingRealtime } from '../hooks/useBookingRealtime';
@@ -76,6 +77,7 @@ export const AdminLayout: React.FC = () => {
   const ourAppSubLinks = [
     { name: 'Home', path: '/our-app/home', icon: Home },
     { name: 'Services', path: '/our-app/services', icon: Sparkles },
+    { name: 'Specialist Tags', path: '/our-app/tags', icon: Tags },
   ];
 
   const secondaryNavLinks = [
