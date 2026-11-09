@@ -358,7 +358,7 @@ export const OperationManagers: React.FC = () => {
             <div>
               <h4 className="text-sm font-bold text-emerald-950">Hub Operation Manager Appointed Successfully!</h4>
               <p className="text-xs text-emerald-800 mt-0.5">
-                Login credentials provisioned for the <strong>ServFex Vendor App</strong> (sign in under <strong>White Collars / Managers</strong>):
+                Login credentials provisioned for the <strong>ServFex Vendor App</strong> (sign in under <strong>House of Masters</strong>):
               </p>
               <div className="mt-2.5 flex flex-wrap items-center gap-3 text-xs bg-white px-3.5 py-2 rounded-xl border border-emerald-200 text-slate-800 font-mono shadow-2xs">
                 <span>Email: <strong className="text-slate-900">{appointmentBanner.email}</strong></span>
@@ -906,7 +906,7 @@ export const OperationManagers: React.FC = () => {
             </div>
           </div>
           <span className="text-[11px] text-slate-400 block -mt-2">
-            Manager will use this password to sign into the ServFex Vendor App under <strong>White Collars / Managers</strong>.
+            Manager will use this password to sign into the ServFex Vendor App under <strong>House of Masters</strong>.
           </span>
 
           {/* Assign 1 or More Partner Hubs Checkboxes */}
