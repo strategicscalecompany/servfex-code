@@ -2163,6 +2163,12 @@ const ServicePreviewPanel: React.FC<ServicePreviewPanelProps> = ({
 
 // ─── Add Category Form ───────────────────────────────────────────────────────
 
+type SpecialistTagOption = {
+  id: string;
+  name: string;
+  categories?: { id: string; name?: string }[];
+};
+
 interface AddCategoryFormProps {
   defaultOrder?: number;
   onSuccess: () => void;
@@ -2175,6 +2181,17 @@ const AddCategoryForm: React.FC<AddCategoryFormProps> = ({ defaultOrder = 0, onS
   const [isActive, setIsActive] = useState(true);
   const [iconBase64, setIconBase64] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [newTagName, setNewTagName] = useState('');
+  const [pendingNewTags, setPendingNewTags] = useState<string[]>([]);
+
+  const { data: allTags = [] } = useQuery({
+    queryKey: ['admin-tags'],
+    queryFn: async () => {
+      const res = await apiClient.get<{ success: boolean; data: SpecialistTagOption[] }>('/admin/tags');
+      return (res.data.data || []).filter((t) => !!t.id);
+    },
+  });
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -2188,7 +2205,14 @@ const AddCategoryForm: React.FC<AddCategoryFormProps> = ({ defaultOrder = 0, onS
       if (iconBase64) {
         payload.iconUrl = iconBase64;
       }
-      const res = await apiClient.post('/admin/categories', payload);
+      const res = await apiClient.post<{ success: boolean; data: { id: string } }>('/admin/categories', payload);
+      const categoryId = res.data.data?.id;
+      if (categoryId && (selectedTagIds.length > 0 || pendingNewTags.length > 0)) {
+        await apiClient.put(`/admin/categories/${categoryId}/tags`, {
+          tagIds: selectedTagIds,
+          create: pendingNewTags.map((tagName) => ({ name: tagName })),
+        });
+      }
       return res.data;
     },
     onSuccess: () => {
@@ -2274,6 +2298,90 @@ const AddCategoryForm: React.FC<AddCategoryFormProps> = ({ defaultOrder = 0, onS
         </div>
       </div>
 
+      <div className="space-y-2">
+        <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider">
+          Specialist Tags
+        </label>
+        <p className="text-xs text-gray-500">
+          Link or create tags for this category. Providers and hub managers assign these when onboarding professionals.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {allTags.map((tag) => {
+            const on = selectedTagIds.includes(tag.id);
+            return (
+              <button
+                key={tag.id}
+                type="button"
+                onClick={() =>
+                  setSelectedTagIds((prev) =>
+                    on ? prev.filter((id) => id !== tag.id) : [...prev, tag.id]
+                  )
+                }
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
+                  on
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-indigo-300'
+                }`}
+              >
+                {tag.name}
+              </button>
+            );
+          })}
+          {allTags.length === 0 && pendingNewTags.length === 0 && (
+            <span className="text-xs text-gray-400">No tags yet — create one below.</span>
+          )}
+        </div>
+        {pendingNewTags.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {pendingNewTags.map((tagName) => (
+              <span
+                key={tagName}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"
+              >
+                + {tagName}
+                <button
+                  type="button"
+                  onClick={() => setPendingNewTags((prev) => prev.filter((n) => n !== tagName))}
+                  className="hover:text-red-600"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newTagName}
+            onChange={(e) => setNewTagName(e.target.value)}
+            placeholder="New tag name (e.g. Electrician)"
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 outline-none"
+          />
+          <button
+            type="button"
+            disabled={newTagName.trim().length < 2}
+            onClick={() => {
+              const trimmed = newTagName.trim();
+              if (trimmed.length < 2) return;
+              const exists = allTags.some((t) => t.name.toLowerCase() === trimmed.toLowerCase());
+              if (exists) {
+                const match = allTags.find((t) => t.name.toLowerCase() === trimmed.toLowerCase());
+                if (match && !selectedTagIds.includes(match.id)) {
+                  setSelectedTagIds((prev) => [...prev, match.id]);
+                }
+              } else if (!pendingNewTags.some((n) => n.toLowerCase() === trimmed.toLowerCase())) {
+                setPendingNewTags((prev) => [...prev, trimmed]);
+              }
+              setNewTagName('');
+            }}
+            className="px-3 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold disabled:opacity-40"
+          >
+            Add tag
+          </button>
+        </div>
+      </div>
+
       <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
         <button
           type="button"
@@ -2309,6 +2417,27 @@ const EditCategoryForm: React.FC<EditCategoryFormProps> = ({ category, onSuccess
   const [iconBase64, setIconBase64] = useState<string | null>(null);
   const [existingIconUrl, setExistingIconUrl] = useState<string | null>(category.iconUrl || null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [newTagName, setNewTagName] = useState('');
+  const [pendingNewTags, setPendingNewTags] = useState<string[]>([]);
+  const [tagsInitialized, setTagsInitialized] = useState(false);
+
+  const { data: allTags = [], isFetched: tagsFetched } = useQuery({
+    queryKey: ['admin-tags'],
+    queryFn: async () => {
+      const res = await apiClient.get<{ success: boolean; data: SpecialistTagOption[] }>('/admin/tags');
+      return (res.data.data || []).filter((t) => !!t.id);
+    },
+  });
+
+  useEffect(() => {
+    if (!tagsFetched || tagsInitialized) return;
+    const linked = allTags
+      .filter((t) => (t.categories || []).some((c) => c.id === category.id))
+      .map((t) => t.id);
+    setSelectedTagIds(linked);
+    setTagsInitialized(true);
+  }, [allTags, category.id, tagsFetched, tagsInitialized]);
 
   const updateMutation = useMutation({
     mutationFn: async () => {
@@ -2320,8 +2449,12 @@ const EditCategoryForm: React.FC<EditCategoryFormProps> = ({ category, onSuccess
       if (iconBase64) {
         payload.iconUrl = iconBase64;
       }
-      const res = await apiClient.patch(`/admin/categories/${category.id}`, payload);
-      return res.data;
+      await apiClient.patch(`/admin/categories/${category.id}`, payload);
+      await apiClient.put(`/admin/categories/${category.id}/tags`, {
+        tagIds: selectedTagIds,
+        create: pendingNewTags.map((tagName) => ({ name: tagName })),
+      });
+      return true;
     },
     onSuccess: () => {
       onSuccess();
@@ -2406,6 +2539,89 @@ const EditCategoryForm: React.FC<EditCategoryFormProps> = ({ category, onSuccess
             />
             <span className="text-sm font-medium text-gray-700">Active (Visible in App)</span>
           </label>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider">
+          Specialist Tags
+        </label>
+        <p className="text-xs text-gray-500">
+          Tags linked here are available to Providers and Hub Operating Managers when onboarding professionals for this category.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {allTags.map((tag) => {
+            const on = selectedTagIds.includes(tag.id);
+            return (
+              <button
+                key={tag.id}
+                type="button"
+                onClick={() =>
+                  setSelectedTagIds((prev) =>
+                    on ? prev.filter((id) => id !== tag.id) : [...prev, tag.id]
+                  )
+                }
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
+                  on
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-indigo-300'
+                }`}
+              >
+                {tag.name}
+              </button>
+            );
+          })}
+          {allTags.length === 0 && pendingNewTags.length === 0 && (
+            <span className="text-xs text-gray-400">No tags yet — create one below.</span>
+          )}
+        </div>
+        {pendingNewTags.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {pendingNewTags.map((tagName) => (
+              <span
+                key={tagName}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"
+              >
+                + {tagName}
+                <button
+                  type="button"
+                  onClick={() => setPendingNewTags((prev) => prev.filter((n) => n !== tagName))}
+                  className="hover:text-red-600"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newTagName}
+            onChange={(e) => setNewTagName(e.target.value)}
+            placeholder="New tag name (e.g. Electrician)"
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 outline-none"
+          />
+          <button
+            type="button"
+            disabled={newTagName.trim().length < 2}
+            onClick={() => {
+              const trimmed = newTagName.trim();
+              if (trimmed.length < 2) return;
+              const match = allTags.find((t) => t.name.toLowerCase() === trimmed.toLowerCase());
+              if (match) {
+                if (!selectedTagIds.includes(match.id)) {
+                  setSelectedTagIds((prev) => [...prev, match.id]);
+                }
+              } else if (!pendingNewTags.some((n) => n.toLowerCase() === trimmed.toLowerCase())) {
+                setPendingNewTags((prev) => [...prev, trimmed]);
+              }
+              setNewTagName('');
+            }}
+            className="px-3 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold disabled:opacity-40"
+          >
+            Add tag
+          </button>
         </div>
       </div>
 
@@ -2960,6 +3176,7 @@ export const Services: React.FC = () => {
           defaultOrder={categories.length}
           onSuccess={() => {
             queryClient.invalidateQueries({ queryKey: ['categories'] });
+            queryClient.invalidateQueries({ queryKey: ['admin-tags'] });
             queryClient.invalidateQueries({ queryKey: ['services'] });
             queryClient.invalidateQueries({ queryKey: ['all-catalog-services-list'] });
             setIsAddCategoryOpen(false);
@@ -3002,6 +3219,7 @@ export const Services: React.FC = () => {
             category={editingCategory}
             onSuccess={() => {
               queryClient.invalidateQueries({ queryKey: ['categories'] });
+              queryClient.invalidateQueries({ queryKey: ['admin-tags'] });
               setEditingCategory(null);
             }}
             onCancel={() => setEditingCategory(null)}
