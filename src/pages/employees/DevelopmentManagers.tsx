@@ -212,7 +212,7 @@ export const DevelopmentManagers: React.FC = () => {
             <div>
               <h4 className="text-sm font-bold text-emerald-950">Development Manager Appointed Successfully!</h4>
               <p className="text-xs text-emerald-800 mt-0.5">
-                Login credentials provisioned for the <strong>ServFex Vendor App</strong> (sign in under <strong>House of Masters</strong>):
+                Login credentials provisioned for the <strong>ServFex Vendor App</strong> (sign in under <strong>Manager portal</strong>):
               </p>
               <div className="mt-2.5 flex flex-wrap items-center gap-3 text-xs bg-white px-3.5 py-2 rounded-xl border border-emerald-200 text-slate-800 font-mono shadow-2xs">
                 <span>Email: <strong className="text-slate-900">{appointmentBanner.email}</strong></span>
@@ -339,7 +339,7 @@ export const DevelopmentManagers: React.FC = () => {
                     <Compass className="w-9 h-9 text-slate-300 mx-auto mb-2" />
                     <p className="font-semibold text-slate-700 text-sm">No Development Managers Appointed</p>
                     <p className="text-[11px] text-slate-400 mt-1 max-w-sm mx-auto">
-                      Click "+ Add Development Manager" to provision field personnel. Appointed managers will immediately be authorized to sign in to the ServFex Vendor App under <strong>House of Masters</strong>.
+                      Click "+ Add Development Manager" to provision field personnel. Appointed managers will immediately be authorized to sign in to the ServFex Vendor App under <strong>Manager portal</strong>.
                     </p>
                     <button
                       onClick={() => setIsAddOpen(true)}
@@ -666,7 +666,7 @@ export const DevelopmentManagers: React.FC = () => {
             </div>
           </div>
           <span className="text-[11px] text-slate-400 block -mt-2">
-            Manager will use this password to sign into the ServFex Vendor App under <strong>House of Masters</strong>.
+            Manager will use this password to sign into the ServFex Vendor App under <strong>Manager portal</strong>.
           </span>
 
           <div>
