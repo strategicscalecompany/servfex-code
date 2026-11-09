@@ -29,7 +29,8 @@ export interface OperationManager {
   email: string;
   phone: string;
   city: string;
-  assignedHubs: string[];        // 1 or more partner vendor hubs assigned by Super Admin
+  assignedHubs: string[];        // Display names of assigned partner hubs
+  assignedHubIds: string[];      // VendorProfile ids of assigned hubs
   documents?: string[];          // Identity / KYC verification documents (multi-image)
   thirtyDaysEarnings: number;    // Money/revenue earned in last 30 days (₹)
   techniciansCount: number;      // Number of employees / field technicians deployed
@@ -69,6 +70,7 @@ export const OperationManagers: React.FC = () => {
         phone: string;
         status: string;
         assignedHubs?: string[];
+        assignedHubIds?: string[];
         metrics?: {
           thirtyDaysEarnings?: string | number;
           thirtyDaysJobs?: number;
@@ -81,53 +83,12 @@ export const OperationManagers: React.FC = () => {
           zone?: string;
           city?: string;
           shiftHours?: string;
-          vendor?: { companyName?: string; warehouseName?: string };
+          vendorId?: string | null;
+          vendor?: { id?: string; companyName?: string; warehouseName?: string };
         };
       }>;
     },
   });
-
-  const managers: OperationManager[] = useMemo(() => {
-    return (apiManagers || []).map((mgr) => {
-      const city = mgr.managerProfile?.city || '—';
-      const fromZone = mgr.managerProfile?.zone
-        ? mgr.managerProfile.zone.split(',').map((h) => h.trim()).filter(Boolean)
-        : [];
-      const fromVendor = mgr.managerProfile?.vendor
-        ? [mgr.managerProfile.vendor.warehouseName || mgr.managerProfile.vendor.companyName].filter(
-            Boolean
-          ) as string[]
-        : [];
-      const assignedHubs =
-        (mgr.assignedHubs && mgr.assignedHubs.length > 0
-          ? mgr.assignedHubs
-          : fromZone.length > 0
-          ? fromZone
-          : fromVendor) || [];
-
-      const earningsRaw = mgr.metrics?.thirtyDaysEarnings ?? '0.00';
-      const thirtyDaysEarnings =
-        typeof earningsRaw === 'number' ? earningsRaw : parseFloat(String(earningsRaw)) || 0;
-
-      return {
-        id: mgr.id,
-        name: mgr.name,
-        email: mgr.email,
-        phone: mgr.phone || '',
-        city,
-        assignedHubs,
-        thirtyDaysEarnings,
-        techniciansCount: mgr.metrics?.techniciansCount ?? 0,
-        complaintsCount: mgr.metrics?.complaintsCount ?? 0,
-        unresolvedComplaints: mgr.metrics?.unresolvedComplaints ?? 0,
-        thirtyDaysJobs: mgr.metrics?.thirtyDaysJobs ?? 0,
-        slaRate: mgr.metrics?.slaRate ?? 100,
-        status: mgr.status === 'ACTIVE' ? 'On-Duty' : 'Off-Duty',
-        shiftHours: mgr.managerProfile?.shiftHours || '09:00 AM - 06:00 PM',
-        emergencyLead: false,
-      };
-    });
-  }, [apiManagers]);
 
   // Fetch real registered partners/vendors to discover live partner vendor fulfillment hubs
   const { data: apiVendors } = useQuery({
@@ -173,13 +134,76 @@ export const OperationManagers: React.FC = () => {
     });
   }, [apiVendors]);
 
+  const hubIdByName = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const hub of livePartnerHubs) {
+      map.set(hub.name.trim().toLowerCase(), hub.id);
+      if (hub.partnerName) map.set(hub.partnerName.trim().toLowerCase(), hub.id);
+    }
+    return map;
+  }, [livePartnerHubs]);
+
+  const managers: OperationManager[] = useMemo(() => {
+    return (apiManagers || []).map((mgr) => {
+      const city = mgr.managerProfile?.city || '—';
+      const fromZone = mgr.managerProfile?.zone
+        ? mgr.managerProfile.zone.split(',').map((h) => h.trim()).filter(Boolean)
+        : [];
+      const fromVendor = mgr.managerProfile?.vendor
+        ? [mgr.managerProfile.vendor.warehouseName || mgr.managerProfile.vendor.companyName].filter(
+            Boolean
+          ) as string[]
+        : [];
+      const assignedHubs =
+        (mgr.assignedHubs && mgr.assignedHubs.length > 0
+          ? mgr.assignedHubs
+          : fromZone.length > 0
+          ? fromZone
+          : fromVendor) || [];
+
+      const assignedHubIds = Array.from(
+        new Set(
+          [
+            ...(mgr.assignedHubIds || []),
+            mgr.managerProfile?.vendorId,
+            mgr.managerProfile?.vendor?.id,
+            ...assignedHubs.map((name) => hubIdByName.get(name.trim().toLowerCase())),
+          ].filter((id): id is string => Boolean(id))
+        )
+      );
+
+      const earningsRaw = mgr.metrics?.thirtyDaysEarnings ?? '0.00';
+      const thirtyDaysEarnings =
+        typeof earningsRaw === 'number' ? earningsRaw : parseFloat(String(earningsRaw)) || 0;
+
+      return {
+        id: mgr.id,
+        name: mgr.name,
+        email: mgr.email,
+        phone: mgr.phone || '',
+        city,
+        assignedHubs,
+        assignedHubIds,
+        thirtyDaysEarnings,
+        techniciansCount: mgr.metrics?.techniciansCount ?? 0,
+        complaintsCount: mgr.metrics?.complaintsCount ?? 0,
+        unresolvedComplaints: mgr.metrics?.unresolvedComplaints ?? 0,
+        thirtyDaysJobs: mgr.metrics?.thirtyDaysJobs ?? 0,
+        slaRate: mgr.metrics?.slaRate ?? 100,
+        status: mgr.status === 'ACTIVE' ? 'On-Duty' : 'Off-Duty',
+        shiftHours: mgr.managerProfile?.shiftHours || '09:00 AM - 06:00 PM',
+        emergencyLead: false,
+      };
+    });
+  }, [apiManagers, hubIdByName]);
+
   const [search, setSearch] = useState('');
   const [cityFilter, setCityFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedManager, setSelectedManager] = useState<OperationManager | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isManageHubsOpen, setIsManageHubsOpen] = useState(false);
-  const [hubSelections, setHubSelections] = useState<string[]>([]);
+  const [hubSelections, setHubSelections] = useState<string[]>([]); // hub IDs
   const [appointmentBanner, setAppointmentBanner] = useState<{ email: string; password: string } | null>(null);
 
   const [formData, setFormData] = useState({
@@ -188,7 +212,7 @@ export const OperationManagers: React.FC = () => {
     phone: '',
     password: 'Manager@1234',
     city: 'Hyderabad',
-    assignedHubs: [] as string[],
+    assignedHubIds: [] as string[],
     documents: [] as string[],
   });
 
@@ -207,17 +231,28 @@ export const OperationManagers: React.FC = () => {
 
   const createManagerMutation = useMutation({
     mutationFn: async () => {
-      const primaryHub = livePartnerHubs.find((h) => formData.assignedHubs.includes(h.name));
+      const selectedHubs = livePartnerHubs.filter((h) => formData.assignedHubIds.includes(h.id));
+      const primaryHub = selectedHubs[0];
       await apiClient.post('/admin/managers', {
         name: formData.name,
         email: formData.email,
         phone: formData.phone,
         password: formData.password || 'Manager@1234',
-        zone: formData.assignedHubs.join(', '),
+        zone: selectedHubs.map((h) => h.name).join(', '),
         city: formData.city || primaryHub?.city || 'Hyderabad',
         kind: 'OPERATIONS',
         vendorId: primaryHub?.id || undefined,
+        hubIds: formData.assignedHubIds,
       });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-managers'] });
+    },
+  });
+
+  const updateHubsMutation = useMutation({
+    mutationFn: async ({ managerId, hubIds }: { managerId: string; hubIds: string[] }) => {
+      await apiClient.patch(`/admin/managers/${managerId}/hubs`, { hubIds });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-managers'] });
@@ -226,7 +261,7 @@ export const OperationManagers: React.FC = () => {
 
   const handleAddManager = (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.assignedHubs.length === 0) {
+    if (formData.assignedHubIds.length === 0) {
       alert('Please assign at least 1 hub to this Hub Operation Manager.');
       return;
     }
@@ -242,7 +277,7 @@ export const OperationManagers: React.FC = () => {
           phone: '',
           password: 'Manager@1234',
           city: 'Hyderabad',
-          assignedHubs: [],
+          assignedHubIds: [],
           documents: [],
         });
       },
@@ -281,7 +316,13 @@ export const OperationManagers: React.FC = () => {
 
   const handleOpenHubManagement = (mgr: OperationManager) => {
     setSelectedManager(mgr);
-    setHubSelections([...mgr.assignedHubs]);
+    setHubSelections(
+      mgr.assignedHubIds.length > 0
+        ? [...mgr.assignedHubIds]
+        : mgr.assignedHubs
+            .map((name) => hubIdByName.get(name.trim().toLowerCase()))
+            .filter((id): id is string => Boolean(id))
+    );
     setIsManageHubsOpen(true);
   };
 
@@ -291,32 +332,49 @@ export const OperationManagers: React.FC = () => {
       alert('A Hub Operation Manager must be assigned to at least 1 hub.');
       return;
     }
-    // Hub reassignment persistence is not yet exposed by the managers API.
-    // Keep selection local for the open inspect session only.
-    setSelectedManager((prev) =>
-      prev ? { ...prev, assignedHubs: hubSelections } : null
+    const selectedNames = livePartnerHubs
+      .filter((h) => hubSelections.includes(h.id))
+      .map((h) => h.name);
+    updateHubsMutation.mutate(
+      { managerId: selectedManager.id, hubIds: hubSelections },
+      {
+        onSuccess: () => {
+          setSelectedManager((prev) =>
+            prev
+              ? { ...prev, assignedHubs: selectedNames, assignedHubIds: [...hubSelections] }
+              : null
+          );
+          setIsManageHubsOpen(false);
+        },
+        onError: (err: any) => {
+          alert(
+            err?.response?.data?.error?.message ||
+              err?.message ||
+              'Failed to save hub assignments'
+          );
+        },
+      }
     );
-    setIsManageHubsOpen(false);
   };
 
-  const toggleHubSelection = (hub: string) => {
-    if (hubSelections.includes(hub)) {
-      setHubSelections(hubSelections.filter((h) => h !== hub));
+  const toggleHubSelection = (hubId: string) => {
+    if (hubSelections.includes(hubId)) {
+      setHubSelections(hubSelections.filter((h) => h !== hubId));
     } else {
-      setHubSelections([...hubSelections, hub]);
+      setHubSelections([...hubSelections, hubId]);
     }
   };
 
-  const toggleFormHubSelection = (hub: string) => {
-    if (formData.assignedHubs.includes(hub)) {
+  const toggleFormHubSelection = (hubId: string) => {
+    if (formData.assignedHubIds.includes(hubId)) {
       setFormData({
         ...formData,
-        assignedHubs: formData.assignedHubs.filter((h) => h !== hub),
+        assignedHubIds: formData.assignedHubIds.filter((h) => h !== hubId),
       });
     } else {
       setFormData({
         ...formData,
-        assignedHubs: [...formData.assignedHubs, hub],
+        assignedHubIds: [...formData.assignedHubIds, hubId],
       });
     }
   };
@@ -791,11 +849,11 @@ export const OperationManagers: React.FC = () => {
             ) : (
               <div className="space-y-2 max-h-64 overflow-y-auto p-1">
                 {livePartnerHubs.map((hub) => {
-                  const isSelected = hubSelections.includes(hub.name);
+                  const isSelected = hubSelections.includes(hub.id);
                   return (
                     <div
                       key={hub.id || hub.name}
-                      onClick={() => toggleHubSelection(hub.name)}
+                      onClick={() => toggleHubSelection(hub.id)}
                       className={`flex items-start justify-between p-3 rounded-xl border text-xs cursor-pointer transition ${
                         isSelected
                           ? 'border-indigo-600 bg-indigo-50/70 text-indigo-950 font-semibold shadow-xs ring-1 ring-indigo-600/20'
@@ -916,7 +974,7 @@ export const OperationManagers: React.FC = () => {
                 Assign 1 or More Partner Hubs to Manage <span className="text-rose-500">*</span>
               </label>
               <span className="text-[11px] text-slate-500 font-semibold">
-                {formData.assignedHubs.length} assigned
+                {formData.assignedHubIds.length} assigned
               </span>
             </div>
             <p className="text-[11px] text-slate-400 mb-2">
@@ -931,11 +989,11 @@ export const OperationManagers: React.FC = () => {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto p-1.5 border border-slate-200 rounded-xl bg-slate-50/50">
                 {livePartnerHubs.map((hub) => {
-                  const isSelected = formData.assignedHubs.includes(hub.name);
+                  const isSelected = formData.assignedHubIds.includes(hub.id);
                   return (
                     <div
                       key={hub.id || hub.name}
-                      onClick={() => toggleFormHubSelection(hub.name)}
+                      onClick={() => toggleFormHubSelection(hub.id)}
                       className={`flex items-start justify-between p-3 rounded-xl border text-xs cursor-pointer transition ${
                         isSelected
                           ? 'border-indigo-600 bg-white text-indigo-950 font-bold shadow-xs ring-1 ring-indigo-600/20'
