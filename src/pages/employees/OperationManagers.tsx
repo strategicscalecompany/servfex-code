@@ -1,24 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Compass,
   Search,
   Plus,
-  Phone,
   ShieldCheck,
-  TrendingUp,
   Building2,
   Users,
   Eye,
   CheckCircle2,
-  Clock,
-  Activity,
   IndianRupee,
   FileText,
   ChevronRight,
   Check,
-  X,
   ShieldAlert,
-  Sparkles,
   Layers,
   MapPin,
 } from 'lucide-react';
@@ -60,7 +54,7 @@ export interface LivePartnerHub {
 export const OperationManagers: React.FC = () => {
   const queryClient = useQueryClient();
 
-  // Load from API
+  // Load from API (metrics are computed server-side from live bookings / hubs)
   const { data: apiManagers } = useQuery({
     queryKey: ['admin-managers', 'OPERATIONS'],
     queryFn: async () => {
@@ -71,42 +65,65 @@ export const OperationManagers: React.FC = () => {
         email: string;
         phone: string;
         status: string;
-        managerProfile?: { zone?: string; city?: string; shiftHours?: string; vendor?: { companyName?: string } };
+        assignedHubs?: string[];
+        metrics?: {
+          thirtyDaysEarnings?: string | number;
+          thirtyDaysJobs?: number;
+          techniciansCount?: number;
+          complaintsCount?: number;
+          unresolvedComplaints?: number;
+          slaRate?: number;
+        };
+        managerProfile?: {
+          zone?: string;
+          city?: string;
+          shiftHours?: string;
+          vendor?: { companyName?: string; warehouseName?: string };
+        };
       }>;
     },
   });
 
-  const mappedApiManagers: OperationManager[] = (apiManagers || []).map((mgr, index) => {
-    const city = mgr.managerProfile?.city || 'Hyderabad';
-    const assignedHubs = mgr.managerProfile?.zone
-      ? mgr.managerProfile.zone.split(',').map((h) => h.trim()).filter(Boolean)
-      : [];
+  const managers: OperationManager[] = useMemo(() => {
+    return (apiManagers || []).map((mgr) => {
+      const city = mgr.managerProfile?.city || '—';
+      const fromZone = mgr.managerProfile?.zone
+        ? mgr.managerProfile.zone.split(',').map((h) => h.trim()).filter(Boolean)
+        : [];
+      const fromVendor = mgr.managerProfile?.vendor
+        ? [mgr.managerProfile.vendor.warehouseName || mgr.managerProfile.vendor.companyName].filter(
+            Boolean
+          ) as string[]
+        : [];
+      const assignedHubs =
+        (mgr.assignedHubs && mgr.assignedHubs.length > 0
+          ? mgr.assignedHubs
+          : fromZone.length > 0
+          ? fromZone
+          : fromVendor) || [];
 
-    return {
-      id: mgr.id,
-      name: mgr.name,
-      email: mgr.email,
-      phone: mgr.phone || '',
-      city,
-      assignedHubs,
-      thirtyDaysEarnings: 1100000 + (index * 250000),
-      techniciansCount: 15 + (index * 9),
-      complaintsCount: index,
-      unresolvedComplaints: 0,
-      thirtyDaysJobs: 120 + (index * 40),
-      slaRate: 98.0,
-      status: mgr.status === 'ACTIVE' ? 'On-Duty' : 'Off-Duty',
-      shiftHours: mgr.managerProfile?.shiftHours || '09:00 AM - 06:00 PM',
-      emergencyLead: index === 0,
-    };
-  });
+      const earningsRaw = mgr.metrics?.thirtyDaysEarnings ?? '0.00';
+      const thirtyDaysEarnings =
+        typeof earningsRaw === 'number' ? earningsRaw : parseFloat(String(earningsRaw)) || 0;
 
-  const [managers, setManagers] = useState<OperationManager[]>([]);
-
-  useEffect(() => {
-    if (mappedApiManagers) {
-      setManagers(mappedApiManagers);
-    }
+      return {
+        id: mgr.id,
+        name: mgr.name,
+        email: mgr.email,
+        phone: mgr.phone || '',
+        city,
+        assignedHubs,
+        thirtyDaysEarnings,
+        techniciansCount: mgr.metrics?.techniciansCount ?? 0,
+        complaintsCount: mgr.metrics?.complaintsCount ?? 0,
+        unresolvedComplaints: mgr.metrics?.unresolvedComplaints ?? 0,
+        thirtyDaysJobs: mgr.metrics?.thirtyDaysJobs ?? 0,
+        slaRate: mgr.metrics?.slaRate ?? 100,
+        status: mgr.status === 'ACTIVE' ? 'On-Duty' : 'Off-Duty',
+        shiftHours: mgr.managerProfile?.shiftHours || '09:00 AM - 06:00 PM',
+        emergencyLead: false,
+      };
+    });
   }, [apiManagers]);
 
   // Fetch real registered partners/vendors to discover live partner vendor fulfillment hubs
@@ -133,7 +150,7 @@ export const OperationManagers: React.FC = () => {
   });
 
   // Strictly real live fulfillment hubs from onboarded partners/vendors in DB (Zero mock hubs)
-  const livePartnerHubs: LivePartnerHub[] = React.useMemo(() => {
+  const livePartnerHubs: LivePartnerHub[] = useMemo(() => {
     return (apiVendors || []).map((v) => {
       const hubName = v.warehouseName || v.companyName;
       const hubLocation = v.warehouseLocation || v.location || 'Partner Location';
@@ -187,14 +204,16 @@ export const OperationManagers: React.FC = () => {
 
   const createManagerMutation = useMutation({
     mutationFn: async () => {
+      const primaryHub = livePartnerHubs.find((h) => formData.assignedHubs.includes(h.name));
       await apiClient.post('/admin/managers', {
         name: formData.name,
         email: formData.email,
         phone: formData.phone,
         password: formData.password || 'Manager@1234',
         zone: formData.assignedHubs.join(', '),
-        city: formData.city,
+        city: formData.city || primaryHub?.city || 'Hyderabad',
         kind: 'OPERATIONS',
+        vendorId: primaryHub?.id || undefined,
       });
     },
     onSuccess: () => {
@@ -209,38 +228,28 @@ export const OperationManagers: React.FC = () => {
       return;
     }
 
-    const newMgr: OperationManager = {
-      id: `OM-${Math.floor(300 + Math.random() * 200)}`,
-      name: formData.name,
-      email: formData.email,
-      phone: formData.phone,
-      city: formData.city,
-      assignedHubs: formData.assignedHubs,
-      document: formData.document || 'ID_Verification.pdf',
-      thirtyDaysEarnings: 950000,
-      techniciansCount: 35,
-      complaintsCount: 2,
-      unresolvedComplaints: 0,
-      thirtyDaysJobs: 650,
-      slaRate: 99.0,
-      status: 'On-Duty',
-      shiftHours: '09:00 AM - 06:00 PM',
-      emergencyLead: false,
-    };
-
     const savedCreds = { email: formData.email, password: formData.password || 'Manager@1234' };
-    createManagerMutation.mutate();
-    setManagers([newMgr, ...managers]);
-    setIsAddOpen(false);
-    setAppointmentBanner(savedCreds);
-    setFormData({
-      name: '',
-      email: '',
-      phone: '',
-      password: 'Manager@1234',
-      city: 'Hyderabad',
-      assignedHubs: [],
-      document: '',
+    createManagerMutation.mutate(undefined, {
+      onSuccess: () => {
+        setIsAddOpen(false);
+        setAppointmentBanner(savedCreds);
+        setFormData({
+          name: '',
+          email: '',
+          phone: '',
+          password: 'Manager@1234',
+          city: 'Hyderabad',
+          assignedHubs: [],
+          document: '',
+        });
+      },
+      onError: (err: any) => {
+        alert(
+          err?.response?.data?.error?.message ||
+            err?.message ||
+            'Failed to appoint Hub Operation Manager'
+        );
+      },
     });
   };
 
@@ -256,12 +265,8 @@ export const OperationManagers: React.FC = () => {
       alert('A Hub Operation Manager must be assigned to at least 1 hub.');
       return;
     }
-
-    setManagers((prev) =>
-      prev.map((m) =>
-        m.id === selectedManager.id ? { ...m, assignedHubs: hubSelections } : m
-      )
-    );
+    // Hub reassignment persistence is not yet exposed by the managers API.
+    // Keep selection local for the open inspect session only.
     setSelectedManager((prev) =>
       prev ? { ...prev, assignedHubs: hubSelections } : null
     );
@@ -353,7 +358,12 @@ export const OperationManagers: React.FC = () => {
             <IndianRupee className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="text-2xl font-extrabold text-slate-900">
-            ₹{(managers.reduce((acc, m) => acc + m.thirtyDaysEarnings, 0) / 100000).toFixed(1)} Lakhs
+            {(() => {
+              const total = managers.reduce((acc, m) => acc + m.thirtyDaysEarnings, 0);
+              return total >= 100000
+                ? `₹${(total / 100000).toFixed(1)} Lakhs`
+                : `₹${total.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+            })()}
           </div>
           <p className="text-xs text-emerald-600 font-semibold mt-1">Total revenue earned last 30 days</p>
         </div>
@@ -378,7 +388,12 @@ export const OperationManagers: React.FC = () => {
             {managers.reduce((acc, m) => acc + m.complaintsCount, 0)} Logged
           </div>
           <p className="text-xs text-amber-600 font-semibold mt-1">
-            {managers.reduce((acc, m) => acc + m.unresolvedComplaints, 0)} Open Escalations ({managers[0]?.slaRate || 98}% resolved)
+            {managers.reduce((acc, m) => acc + m.unresolvedComplaints, 0)} Open Escalations
+            {managers.length > 0
+              ? ` (${(
+                  managers.reduce((acc, m) => acc + m.slaRate, 0) / managers.length
+                ).toFixed(0)}% resolved)`
+              : ''}
           </p>
         </div>
 
@@ -631,7 +646,9 @@ export const OperationManagers: React.FC = () => {
                 <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
                 <div>
                   <span className="font-bold text-slate-800 block">Identity / KYC Verification Document</span>
-                  <span className="text-slate-500 font-medium">{selectedManager.document || 'Aadhaar_PAN_Verification.pdf'}</span>
+                  <span className="text-slate-500 font-medium">
+                    {selectedManager.document || 'No document uploaded'}
+                  </span>
                 </div>
               </div>
               <span className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
