@@ -15,6 +15,9 @@ import {
   ShieldAlert,
   Layers,
   MapPin,
+  Upload,
+  X,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { Modal } from '../../components/common/Modal';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -27,7 +30,7 @@ export interface OperationManager {
   phone: string;
   city: string;
   assignedHubs: string[];        // 1 or more partner vendor hubs assigned by Super Admin
-  document?: string;             // Identity / KYC verification document
+  documents?: string[];          // Identity / KYC verification documents (multi-image)
   thirtyDaysEarnings: number;    // Money/revenue earned in last 30 days (₹)
   techniciansCount: number;      // Number of employees / field technicians deployed
   complaintsCount: number;       // Customer complaints in last 30 days
@@ -186,7 +189,7 @@ export const OperationManagers: React.FC = () => {
     password: 'Manager@1234',
     city: 'Hyderabad',
     assignedHubs: [] as string[],
-    document: '',
+    documents: [] as string[],
   });
 
   const filteredManagers = managers.filter((mgr) => {
@@ -240,7 +243,7 @@ export const OperationManagers: React.FC = () => {
           password: 'Manager@1234',
           city: 'Hyderabad',
           assignedHubs: [],
-          document: '',
+          documents: [],
         });
       },
       onError: (err: any) => {
@@ -251,6 +254,29 @@ export const OperationManagers: React.FC = () => {
         );
       },
     });
+  };
+
+  const addDocumentsFromFiles = (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    const names = Array.from(fileList)
+      .map((f) => f.name.trim())
+      .filter(Boolean);
+    if (names.length === 0) return;
+    setFormData((prev) => {
+      const existing = new Set(prev.documents.map((d) => d.toLowerCase()));
+      const next = [...prev.documents];
+      for (const name of names) {
+        if (!existing.has(name.toLowerCase())) next.push(name);
+      }
+      return { ...prev, documents: next };
+    });
+  };
+
+  const removeDocument = (name: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      documents: prev.documents.filter((d) => d !== name),
+    }));
   };
 
   const handleOpenHubManagement = (mgr: OperationManager) => {
@@ -640,20 +666,38 @@ export const OperationManagers: React.FC = () => {
               </div>
             </div>
 
-            {/* Uploaded Verification Document */}
-            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs flex items-center justify-between">
-              <div className="flex items-center gap-2.5 truncate">
-                <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
-                <div>
-                  <span className="font-bold text-slate-800 block">Identity / KYC Verification Document</span>
-                  <span className="text-slate-500 font-medium">
-                    {selectedManager.document || 'No document uploaded'}
+            {/* Uploaded Verification Documents */}
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <span className="font-bold text-slate-800">
+                    Identity / KYC Verification Documents
                   </span>
                 </div>
+                {(selectedManager.documents?.length || 0) > 0 && (
+                  <span className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                    {selectedManager.documents!.length} uploaded
+                  </span>
+                )}
               </div>
-              <span className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
-                Verified
-              </span>
+              {(selectedManager.documents?.length || 0) === 0 ? (
+                <span className="text-slate-500 font-medium">No documents uploaded</span>
+              ) : (
+                <ul className="space-y-1.5">
+                  {selectedManager.documents!.map((doc) => (
+                    <li
+                      key={doc}
+                      className="flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-2.5 py-1.5"
+                    >
+                      <ImageIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span className="truncate text-slate-700 font-medium" title={doc}>
+                        {doc}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             {/* 30-Day Financial & Operational Summary */}
@@ -925,33 +969,95 @@ export const OperationManagers: React.FC = () => {
             )}
           </div>
 
-          {/* Upload Documents Field */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
-              Upload Documents
-            </label>
-            <div className="relative border border-slate-200 rounded-xl p-2.5 bg-white hover:border-slate-400 transition flex items-center justify-between">
-              <input
-                type="file"
-                accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    setFormData({ ...formData, document: file.name });
-                  }
-                }}
-                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-              />
-              <div className="flex items-center gap-2 truncate pr-2">
-                <FileText className="w-4 h-4 text-slate-400 shrink-0" />
-                <span className={formData.document ? 'text-sm font-medium text-slate-800 truncate' : 'text-sm text-slate-400 truncate'}>
-                  {formData.document || 'Upload document (PDF, PNG, JPG, DOC)'}
+          {/* Upload Documents — same multi-file pattern as professional onboarding */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
+                Upload Documents
+              </label>
+              {formData.documents.length > 0 && (
+                <span className="text-[11px] font-semibold text-slate-500">
+                  {formData.documents.length} uploaded
                 </span>
-              </div>
-              <span className="text-xs font-semibold px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg shrink-0 pointer-events-none">
-                Browse
-              </span>
+              )}
             </div>
+            <p className="text-[11px] text-slate-400">
+              Select multiple images or documents (PNG, JPG, PDF, DOC) — same as professional onboarding.
+            </p>
+
+            {formData.documents.length === 0 ? (
+              <div className="relative border-2 border-dashed border-slate-200 rounded-xl p-5 bg-slate-50/60 hover:border-slate-400 transition">
+                <input
+                  type="file"
+                  multiple
+                  accept="image/png,image/jpeg,image/jpg,image/webp,.pdf,.doc,.docx"
+                  onChange={(e) => {
+                    addDocumentsFromFiles(e.target.files);
+                    e.target.value = '';
+                  }}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                />
+                <div className="flex flex-col items-center text-center pointer-events-none gap-2">
+                  <div className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center">
+                    <Upload className="w-4 h-4" />
+                  </div>
+                  <span className="text-sm font-semibold text-slate-800">
+                    Upload verification documents
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Browse and select multiple images at once
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <ul className="space-y-1.5 max-h-40 overflow-y-auto">
+                  {formData.documents.map((doc, index) => (
+                    <li
+                      key={`${doc}-${index}`}
+                      className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center shrink-0">
+                        <ImageIcon className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-slate-800">Document #{index + 1}</p>
+                        <p className="text-[11px] text-slate-500 truncate" title={doc}>
+                          {doc}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeDocument(doc)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                        title="Remove"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <div className="relative">
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/png,image/jpeg,image/jpg,image/webp,.pdf,.doc,.docx"
+                    onChange={(e) => {
+                      addDocumentsFromFiles(e.target.files);
+                      e.target.value = '';
+                    }}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  />
+                  <button
+                    type="button"
+                    className="w-full pointer-events-none px-3 py-2 rounded-xl border border-dashed border-slate-300 text-xs font-semibold text-slate-700 bg-slate-50 inline-flex items-center justify-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add more images / documents
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Role Features Preview */}
