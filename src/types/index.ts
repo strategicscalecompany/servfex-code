@@ -149,6 +149,8 @@ export interface VendorProfile {
   warehousePhone?: string | null;
   warehouseImageUrl?: string | null;
   serviceRadiusKm?: number | null;
+  /** Hub settlement UPI — used for payment QR (not professional UPI). */
+  upiId?: string | null;
   createdAt: string;
   user?: User;
   employees?: EmployeeProfile[];

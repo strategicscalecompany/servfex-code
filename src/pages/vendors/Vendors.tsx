@@ -104,7 +104,7 @@ const WarehouseMiniMap: React.FC<{
         const position = { lat, lng };
         const infoHtml = `
               <div style="padding: 4px; font-family: inherit;">
-                <div style="font-weight: 700; font-size: 13px; color: #0f172a;">${title || 'Warehouse Depot'}</div>
+                <div style="font-weight: 700; font-size: 13px; color: #0f172a;">${title || 'Hub Depot'}</div>
                 <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
                 ${
                   coverageMeters > 0
@@ -128,7 +128,7 @@ const WarehouseMiniMap: React.FC<{
           const marker = new googleMaps.Marker({
             position,
             map,
-            title: title || 'Warehouse Depot',
+            title: title || 'Hub Depot',
             animation: googleMaps.Animation.DROP,
           });
 
@@ -157,7 +157,7 @@ const WarehouseMiniMap: React.FC<{
           mapInstanceRef.current.setCenter(position);
           if (markerRef.current) {
             markerRef.current.setPosition(position);
-            markerRef.current.setTitle(title || 'Warehouse Depot');
+            markerRef.current.setTitle(title || 'Hub Depot');
           }
           if (infoWindowRef.current && markerRef.current) {
             infoWindowRef.current.setContent(infoHtml);
@@ -333,6 +333,7 @@ export const Vendors: React.FC = () => {
     latitude: null as number | null,
     longitude: null as number | null,
     serviceRadiusKm: '',
+    upiId: '',
     businessLicense: '',
     taxId: '',
     commissionRate: 0,
@@ -413,7 +414,7 @@ export const Vendors: React.FC = () => {
       const hostedUrl = await uploadMediaToCloud(optimized, 'servfex/warehouses');
       setFormData((prev) => ({ ...prev, warehouseImage: hostedUrl }));
     } catch (err: any) {
-      alert(err.response?.data?.error?.message || err.message || 'Failed to upload warehouse photo');
+      alert(err.response?.data?.error?.message || err.message || 'Failed to upload hub photo');
     }
   };
 
@@ -496,7 +497,7 @@ export const Vendors: React.FC = () => {
     setUploadedDocs((prev) => prev.filter((d) => d.id !== id));
   };
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['vendors', search, kycFilter, page],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -573,9 +574,10 @@ export const Vendors: React.FC = () => {
     mutationFn: async (payload: any) => {
       return apiClient.post('/admin/vendors', payload);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['vendors'] });
-      queryClient.invalidateQueries({ queryKey: ['warehouse-map-vendors'] });
+    onSuccess: async () => {
+      setSearch('');
+      setKycFilter('');
+      setPage(1);
       setIsCreateOpen(false);
       setFormData({
         companyName: '',
@@ -592,6 +594,7 @@ export const Vendors: React.FC = () => {
         latitude: null,
         longitude: null,
         serviceRadiusKm: '',
+        upiId: '',
         businessLicense: '',
         taxId: '',
         commissionRate: 0,
@@ -601,6 +604,11 @@ export const Vendors: React.FC = () => {
       setUrlResolveError(null);
       setUploadedDocs([]);
       setDocUploadError(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['vendors'] }),
+        queryClient.invalidateQueries({ queryKey: ['warehouse-map-vendors'] }),
+      ]);
+      await refetch();
     },
   });
 
@@ -681,6 +689,24 @@ export const Vendors: React.FC = () => {
                   <td colSpan={4} className="py-12 text-center text-slate-400">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-600" />
                     Loading partner profiles...
+                  </td>
+                </tr>
+              ) : isError ? (
+                <tr>
+                  <td colSpan={4} className="py-16 text-center text-rose-500">
+                    <p className="text-sm font-semibold">Could not load partners</p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      {(error as any)?.response?.data?.error?.message ||
+                        (error as Error)?.message ||
+                        'Refresh and try again.'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => refetch()}
+                      className="mt-3 text-xs font-semibold text-indigo-600 hover:underline"
+                    >
+                      Retry
+                    </button>
                   </td>
                 </tr>
               ) : data?.data?.length === 0 ? (
@@ -815,7 +841,7 @@ export const Vendors: React.FC = () => {
               <div className="p-3.5 rounded-xl border border-indigo-100 bg-indigo-50/50 text-xs space-y-2">
                 <span className="text-indigo-600 font-bold uppercase tracking-wider flex items-center gap-1.5">
                   <Warehouse className="w-3.5 h-3.5" />
-                  Warehouse Depot & Logistics Hub
+                  Hub Depot & Logistics
                 </span>
                 <div className="grid grid-cols-2 gap-2 text-slate-700">
                   <div>
@@ -823,11 +849,11 @@ export const Vendors: React.FC = () => {
                     <span className="font-semibold text-slate-900">{selectedVendor.warehouseName || 'Main Hub Depot'}</span>
                   </div>
                   <div>
-                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Warehouse Phone</span>
+                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Hub Phone</span>
                     <span className="font-medium text-slate-900">{selectedVendor.warehousePhone || '—'}</span>
                   </div>
                   <div className="col-span-2">
-                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Warehouse Location</span>
+                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Hub Location</span>
                     <span className="font-medium text-slate-800">{selectedVendor.warehouseLocation || selectedVendor.location}</span>
                   </div>
                 </div>
@@ -835,7 +861,7 @@ export const Vendors: React.FC = () => {
                   <div className="pt-1">
                     <img
                       src={selectedVendor.warehouseImageUrl}
-                      alt="Warehouse Facility"
+                      alt="Hub Facility"
                       className="w-full h-28 object-cover rounded-lg border border-slate-200"
                     />
                   </div>
@@ -957,7 +983,7 @@ export const Vendors: React.FC = () => {
             setVendorToDelete(null);
           }}
           title={`Delete Partner: ${vendorToDelete.companyName}`}
-          message={`Are you sure you want to permanently delete "${vendorToDelete.companyName}"? This action will remove the partner and their warehouse depot profile.`}
+          message={`Are you sure you want to permanently delete "${vendorToDelete.companyName}"? This action will remove the partner and their hub depot profile.`}
           confirmLabel="Delete Partner"
           isDestructive={true}
           requireReason={false}
@@ -1168,7 +1194,7 @@ export const Vendors: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <Warehouse className="w-4 h-4 text-indigo-600" />
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                    Warehouse & Depot Details
+                    Hub & Depot Details
                   </h4>
                 </div>
                 {pinpointedCoords && (
@@ -1307,14 +1333,14 @@ export const Vendors: React.FC = () => {
                         })}
                       </div>
                       <p className="text-[11px] text-slate-500">
-                        Enter the coverage in kilometres. A value of 1 draws a 1 km circle around this warehouse pin.
+                        Enter the coverage in kilometres. A value of 1 draws a 1 km circle around this hub pin.
                       </p>
                     </div>
 
                     <WarehouseMiniMap
                       lat={pinpointedCoords.lat}
                       lng={pinpointedCoords.lng}
-                      title={formData.warehouseName || 'Warehouse Depot'}
+                      title={formData.warehouseName || 'Hub Depot'}
                       radiusKm={parseCoverageRadiusKm(formData.serviceRadiusKm)}
                     />
                   </div>
@@ -1324,7 +1350,7 @@ export const Vendors: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label htmlFor="warehouse-name-input" className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
-                    Warehouse Name
+                    Hub Name
                   </label>
                   <input
                     id="warehouse-name-input"
@@ -1338,7 +1364,7 @@ export const Vendors: React.FC = () => {
                 </div>
                 <div>
                   <label htmlFor="warehouse-phone-input" className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
-                    Warehouse Contact Number
+                    Hub Contact Number
                   </label>
                   <input
                     id="warehouse-phone-input"
@@ -1354,8 +1380,27 @@ export const Vendors: React.FC = () => {
               </div>
 
               <div>
+                <label htmlFor="hub-upi-input" className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Hub Settlement UPI ID
+                </label>
+                <input
+                  id="hub-upi-input"
+                  name="upiId"
+                  type="text"
+                  autoComplete="off"
+                  placeholder="e.g. partner@upi (used for all job payment QR)"
+                  value={formData.upiId}
+                  onChange={(e) => setFormData({ ...formData, upiId: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-indigo-500 bg-white"
+                />
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Professionals do not use their own UPI — customer payments go to this partner hub UPI.
+                </p>
+              </div>
+
+              <div>
                 <label htmlFor="warehouse-location-input" className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
-                  Warehouse Location / Address
+                  Hub Location / Address
                 </label>
                 <input
                   id="warehouse-location-input"
@@ -1368,21 +1413,21 @@ export const Vendors: React.FC = () => {
                 />
               </div>
 
-              {/* Warehouse Facility Image */}
+              {/* Hub Facility Image */}
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                  Warehouse Image
+                  Hub Image
                 </label>
                 {formData.warehouseImage ? (
                   <div className="relative rounded-xl border border-slate-200 overflow-hidden bg-white p-2 flex items-center gap-3">
                     <img
                       src={formData.warehouseImage}
-                      alt="Warehouse preview"
+                      alt="Hub preview"
                       className="w-20 h-16 rounded-lg object-cover border border-slate-200 shrink-0"
                     />
                     <div className="flex-1 min-w-0">
                       <span className="text-xs font-bold text-slate-800 block">
-                        Warehouse Facility Attached
+                        Hub Facility Attached
                       </span>
                       <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1 mt-0.5">
                         <Check className="w-3.5 h-3.5" /> Ready for depot registration
@@ -1412,14 +1457,14 @@ export const Vendors: React.FC = () => {
                   >
                     <Warehouse className="w-5 h-5 text-indigo-500 mx-auto mb-1" />
                     <p className="text-xs font-bold text-slate-700">
-                      Click to upload warehouse facility photo
+                      Click to upload hub facility photo
                     </p>
                     <p className="text-[10px] text-slate-400 mt-0.5">PNG, JPG, WebP up to 5MB</p>
                   </div>
                 )}
                 <input
                   ref={warehouseFileInputRef}
-                  id="warehouse-file-input"
+                  id="hub-file-input"
                   name="warehouseFile"
                   type="file"
                   accept="image/*"
