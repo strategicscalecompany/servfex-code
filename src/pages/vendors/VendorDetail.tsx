@@ -793,7 +793,7 @@ export const VendorDetail: React.FC = () => {
                 <p className="text-xs text-emerald-600 font-medium">Hub UPI updated.</p>
               )}
               <p className="text-[11px] text-slate-500">
-                Used for all job payment QR codes. Professionals cannot set their own settlement UPI.
+                Used for all job payment QR codes. Only Super Admin or HOM can edit this — not Partners or professionals.
                 Current:{' '}
                 <span className="font-semibold text-slate-700">{vendor.upiId || 'not set'}</span>
               </p>
