@@ -6,7 +6,6 @@ import { hostMediaIfNeeded, hostMediaList } from '../../api/upload';
 import { Service, ServiceCategory, ServiceSubCategory, ServicePackage } from '../../types';
 import { Modal } from '../../components/common/Modal';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
-import { AssignServicesToPartnersModal } from '../../components/services/AssignServicesToPartnersModal';
 import {
   Home,
   Sparkles,
@@ -18,7 +17,6 @@ import {
   Package,
   Loader2,
   Check,
-  UserCheck,
   Layers,
   Upload,
   X,
@@ -29,7 +27,6 @@ import {
   ChevronLeft,
   ChevronRight,
   IndianRupee,
-  Tag,
   ArrowDown,
   GripVertical,
   ListChecks,
@@ -1011,12 +1008,6 @@ const AddServiceForm: React.FC<AddServiceFormProps> = ({ categories, initialCate
 
 // ─── Service Live Preview Component (30% Pane) ──────────────────────────────
 
-interface ServicePreviewPanelProps {
-  service: Service | null;
-  onManagePackages: (service: Service) => void;
-  onAssignService: (service: Service) => void;
-}
-
 // ─── Service Live Preview Component (30% Pane — Authentic Mobile UI) ─────────
 
 const DEMO_PACKAGES: ServicePackage[] = [
@@ -1328,7 +1319,6 @@ interface ServicePreviewPanelProps {
   onSelectCategory?: (category: ServiceCategory) => void;
   onSelectService?: (service: Service) => void;
   onManagePackages: (service: Service) => void;
-  onAssignService: (service: Service) => void;
 }
 
 const ServicePreviewPanel: React.FC<ServicePreviewPanelProps> = ({
@@ -1339,7 +1329,6 @@ const ServicePreviewPanel: React.FC<ServicePreviewPanelProps> = ({
   onSelectCategory,
   onSelectService,
   onManagePackages,
-  onAssignService,
 }) => {
   const [previewPage, setPreviewPage] = useState<'home' | 'packages' | 'details'>('home');
   const [internalSelectedService, setInternalSelectedService] = useState<Service | null>(null);
@@ -2148,26 +2137,12 @@ const ServicePreviewPanel: React.FC<ServicePreviewPanelProps> = ({
               <Package className="w-3.5 h-3.5" />
               <span>Configure Packages ({packagesList.length})</span>
             </button>
-            <button
-              type="button"
-              onClick={() => onAssignService(activeService)}
-              className="py-2 px-3 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold transition border border-gray-300 shadow-2xs flex items-center justify-center gap-1.5"
-            >
-              <UserCheck className="w-3.5 h-3.5" />
-              <span>Assign</span>
-            </button>
           </div>
         </div>
       );
     };
 
 // ─── Add Category Form ───────────────────────────────────────────────────────
-
-type SpecialistTagOption = {
-  id: string;
-  name: string;
-  categories?: { id: string; name?: string }[];
-};
 
 interface AddCategoryFormProps {
   defaultOrder?: number;
@@ -2181,17 +2156,6 @@ const AddCategoryForm: React.FC<AddCategoryFormProps> = ({ defaultOrder = 0, onS
   const [isActive, setIsActive] = useState(true);
   const [iconBase64, setIconBase64] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const [newTagName, setNewTagName] = useState('');
-  const [pendingNewTags, setPendingNewTags] = useState<string[]>([]);
-
-  const { data: allTags = [] } = useQuery({
-    queryKey: ['admin-tags'],
-    queryFn: async () => {
-      const res = await apiClient.get<{ success: boolean; data: SpecialistTagOption[] }>('/admin/tags');
-      return (res.data.data || []).filter((t) => !!t.id);
-    },
-  });
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -2206,13 +2170,6 @@ const AddCategoryForm: React.FC<AddCategoryFormProps> = ({ defaultOrder = 0, onS
         payload.iconUrl = iconBase64;
       }
       const res = await apiClient.post<{ success: boolean; data: { id: string } }>('/admin/categories', payload);
-      const categoryId = res.data.data?.id;
-      if (categoryId && (selectedTagIds.length > 0 || pendingNewTags.length > 0)) {
-        await apiClient.put(`/admin/categories/${categoryId}/tags`, {
-          tagIds: selectedTagIds,
-          create: pendingNewTags.map((tagName) => ({ name: tagName })),
-        });
-      }
       return res.data;
     },
     onSuccess: () => {
@@ -2298,90 +2255,6 @@ const AddCategoryForm: React.FC<AddCategoryFormProps> = ({ defaultOrder = 0, onS
         </div>
       </div>
 
-      <div className="space-y-2">
-        <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider">
-          Specialist Tags
-        </label>
-        <p className="text-xs text-gray-500">
-          Link or create tags for this category. Providers and hub managers assign these when onboarding professionals.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {allTags.map((tag) => {
-            const on = selectedTagIds.includes(tag.id);
-            return (
-              <button
-                key={tag.id}
-                type="button"
-                onClick={() =>
-                  setSelectedTagIds((prev) =>
-                    on ? prev.filter((id) => id !== tag.id) : [...prev, tag.id]
-                  )
-                }
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
-                  on
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-indigo-300'
-                }`}
-              >
-                {tag.name}
-              </button>
-            );
-          })}
-          {allTags.length === 0 && pendingNewTags.length === 0 && (
-            <span className="text-xs text-gray-400">No tags yet — create one below.</span>
-          )}
-        </div>
-        {pendingNewTags.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {pendingNewTags.map((tagName) => (
-              <span
-                key={tagName}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"
-              >
-                + {tagName}
-                <button
-                  type="button"
-                  onClick={() => setPendingNewTags((prev) => prev.filter((n) => n !== tagName))}
-                  className="hover:text-red-600"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={newTagName}
-            onChange={(e) => setNewTagName(e.target.value)}
-            placeholder="New tag name (e.g. Electrician)"
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 outline-none"
-          />
-          <button
-            type="button"
-            disabled={newTagName.trim().length < 2}
-            onClick={() => {
-              const trimmed = newTagName.trim();
-              if (trimmed.length < 2) return;
-              const exists = allTags.some((t) => t.name.toLowerCase() === trimmed.toLowerCase());
-              if (exists) {
-                const match = allTags.find((t) => t.name.toLowerCase() === trimmed.toLowerCase());
-                if (match && !selectedTagIds.includes(match.id)) {
-                  setSelectedTagIds((prev) => [...prev, match.id]);
-                }
-              } else if (!pendingNewTags.some((n) => n.toLowerCase() === trimmed.toLowerCase())) {
-                setPendingNewTags((prev) => [...prev, trimmed]);
-              }
-              setNewTagName('');
-            }}
-            className="px-3 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold disabled:opacity-40"
-          >
-            Add tag
-          </button>
-        </div>
-      </div>
-
       <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
         <button
           type="button"
@@ -2417,27 +2290,6 @@ const EditCategoryForm: React.FC<EditCategoryFormProps> = ({ category, onSuccess
   const [iconBase64, setIconBase64] = useState<string | null>(null);
   const [existingIconUrl, setExistingIconUrl] = useState<string | null>(category.iconUrl || null);
   const [error, setError] = useState<string | null>(null);
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const [newTagName, setNewTagName] = useState('');
-  const [pendingNewTags, setPendingNewTags] = useState<string[]>([]);
-  const [tagsInitialized, setTagsInitialized] = useState(false);
-
-  const { data: allTags = [], isFetched: tagsFetched } = useQuery({
-    queryKey: ['admin-tags'],
-    queryFn: async () => {
-      const res = await apiClient.get<{ success: boolean; data: SpecialistTagOption[] }>('/admin/tags');
-      return (res.data.data || []).filter((t) => !!t.id);
-    },
-  });
-
-  useEffect(() => {
-    if (!tagsFetched || tagsInitialized) return;
-    const linked = allTags
-      .filter((t) => (t.categories || []).some((c) => c.id === category.id))
-      .map((t) => t.id);
-    setSelectedTagIds(linked);
-    setTagsInitialized(true);
-  }, [allTags, category.id, tagsFetched, tagsInitialized]);
 
   const updateMutation = useMutation({
     mutationFn: async () => {
@@ -2450,10 +2302,6 @@ const EditCategoryForm: React.FC<EditCategoryFormProps> = ({ category, onSuccess
         payload.iconUrl = iconBase64;
       }
       await apiClient.patch(`/admin/categories/${category.id}`, payload);
-      await apiClient.put(`/admin/categories/${category.id}/tags`, {
-        tagIds: selectedTagIds,
-        create: pendingNewTags.map((tagName) => ({ name: tagName })),
-      });
       return true;
     },
     onSuccess: () => {
@@ -2542,89 +2390,6 @@ const EditCategoryForm: React.FC<EditCategoryFormProps> = ({ category, onSuccess
         </div>
       </div>
 
-      <div className="space-y-2">
-        <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider">
-          Specialist Tags
-        </label>
-        <p className="text-xs text-gray-500">
-          Tags linked here are available to Providers and Hub Operating Managers when onboarding professionals for this category.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {allTags.map((tag) => {
-            const on = selectedTagIds.includes(tag.id);
-            return (
-              <button
-                key={tag.id}
-                type="button"
-                onClick={() =>
-                  setSelectedTagIds((prev) =>
-                    on ? prev.filter((id) => id !== tag.id) : [...prev, tag.id]
-                  )
-                }
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
-                  on
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-indigo-300'
-                }`}
-              >
-                {tag.name}
-              </button>
-            );
-          })}
-          {allTags.length === 0 && pendingNewTags.length === 0 && (
-            <span className="text-xs text-gray-400">No tags yet — create one below.</span>
-          )}
-        </div>
-        {pendingNewTags.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {pendingNewTags.map((tagName) => (
-              <span
-                key={tagName}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"
-              >
-                + {tagName}
-                <button
-                  type="button"
-                  onClick={() => setPendingNewTags((prev) => prev.filter((n) => n !== tagName))}
-                  className="hover:text-red-600"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={newTagName}
-            onChange={(e) => setNewTagName(e.target.value)}
-            placeholder="New tag name (e.g. Electrician)"
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 outline-none"
-          />
-          <button
-            type="button"
-            disabled={newTagName.trim().length < 2}
-            onClick={() => {
-              const trimmed = newTagName.trim();
-              if (trimmed.length < 2) return;
-              const match = allTags.find((t) => t.name.toLowerCase() === trimmed.toLowerCase());
-              if (match) {
-                if (!selectedTagIds.includes(match.id)) {
-                  setSelectedTagIds((prev) => [...prev, match.id]);
-                }
-              } else if (!pendingNewTags.some((n) => n.toLowerCase() === trimmed.toLowerCase())) {
-                setPendingNewTags((prev) => [...prev, trimmed]);
-              }
-              setNewTagName('');
-            }}
-            className="px-3 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold disabled:opacity-40"
-          >
-            Add tag
-          </button>
-        </div>
-      </div>
-
       <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
         <button
           type="button"
@@ -2678,10 +2443,6 @@ export const Services: React.FC = () => {
     },
   });
 
-  // Assign to vendor modal (multi service × multi partner)
-  const [isAssignOpen, setIsAssignOpen] = useState(false);
-  const [assignPreselectedServiceIds, setAssignPreselectedServiceIds] = useState<string[]>([]);
-
   const { data, isLoading } = useQuery({
     queryKey: ['services', search, categoryFilter, page, pageSize],
     queryFn: async () => {
@@ -2701,14 +2462,6 @@ export const Services: React.FC = () => {
     queryFn: async () => {
       const res = await apiClient.get<{ success: boolean; data: ServiceCategory[] }>('/admin/categories');
       return res.data.data;
-    },
-  });
-
-  const { data: vendorsData = [] } = useQuery({
-    queryKey: ['vendors-list-selector'],
-    queryFn: async () => {
-      const res = await apiClient.get('/admin/vendors?limit=100');
-      return res.data?.data || [];
     },
   });
 
@@ -2733,12 +2486,6 @@ export const Services: React.FC = () => {
 
   const services: Service[] = data?.data ?? [];
   const pagination = data?.pagination;
-
-  const catalogForAssign = (allServicesData.length > 0 ? allServicesData : services) as Service[];
-  const openAssignModal = (serviceId = '') => {
-    setAssignPreselectedServiceIds(serviceId ? [serviceId] : []);
-    setIsAssignOpen(true);
-  };
 
   const filteredCategories = categories.filter((c) => {
     const q = categorySearch.toLowerCase().trim();
@@ -2766,12 +2513,6 @@ export const Services: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => openAssignModal()}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition"
-          >
-            <UserCheck className="w-4 h-4" /> Assign to Partner
-          </button>
           <button
             onClick={() => setIsAddCategoryOpen(true)}
             className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold transition shadow-sm"
@@ -3092,14 +2833,6 @@ export const Services: React.FC = () => {
                           </button>
                           <div className="flex items-center gap-1.5 w-full justify-end">
                             <button
-                              onClick={() => openAssignModal(service.id)}
-                              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition"
-                              title="Assign to Partner"
-                            >
-                              <UserCheck className="w-3.5 h-3.5" />
-                              <span>Assign</span>
-                            </button>
-                            <button
                               onClick={() => setArchivingService(service)}
                               className="p-1.5 rounded-lg text-rose-500 bg-rose-50 hover:bg-rose-100 transition"
                               title="Archive Service"
@@ -3160,7 +2893,6 @@ export const Services: React.FC = () => {
             onSelectCategory={(cat) => setSelectedCategoryId(cat.id)}
             onSelectService={(s) => setPreviewServiceId(s.id)}
             onManagePackages={(s) => setPackagesService(s)}
-            onAssignService={(s) => openAssignModal(s.id)}
           />
         </div>
       </div>
@@ -3176,7 +2908,6 @@ export const Services: React.FC = () => {
           defaultOrder={categories.length}
           onSuccess={() => {
             queryClient.invalidateQueries({ queryKey: ['categories'] });
-            queryClient.invalidateQueries({ queryKey: ['admin-tags'] });
             queryClient.invalidateQueries({ queryKey: ['services'] });
             queryClient.invalidateQueries({ queryKey: ['all-catalog-services-list'] });
             setIsAddCategoryOpen(false);
@@ -3219,7 +2950,6 @@ export const Services: React.FC = () => {
             category={editingCategory}
             onSuccess={() => {
               queryClient.invalidateQueries({ queryKey: ['categories'] });
-              queryClient.invalidateQueries({ queryKey: ['admin-tags'] });
               setEditingCategory(null);
             }}
             onCancel={() => setEditingCategory(null)}
@@ -3269,24 +2999,6 @@ export const Services: React.FC = () => {
         danger
       />
 
-      {/* Assign to Partner Modal — multi service × multi partner */}
-      <AssignServicesToPartnersModal
-        isOpen={isAssignOpen}
-        onClose={() => {
-          setIsAssignOpen(false);
-          setAssignPreselectedServiceIds([]);
-        }}
-        services={catalogForAssign}
-        partners={vendorsData}
-        preselectedServiceIds={assignPreselectedServiceIds}
-        onAssigned={() => {
-          queryClient.invalidateQueries({ queryKey: ['services'] });
-          queryClient.invalidateQueries({ queryKey: ['vendors'] });
-          queryClient.invalidateQueries({ queryKey: ['vendors-list-selector'] });
-          queryClient.invalidateQueries({ queryKey: ['vendor-detail'] });
-          queryClient.invalidateQueries({ queryKey: ['all-catalog-services-list'] });
-        }}
-      />
     </div>
   );
 };

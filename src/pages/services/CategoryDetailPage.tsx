@@ -8,7 +8,6 @@ import {
   Upload,
   X,
   Package,
-  UserCheck,
   ChevronDown,
   ChevronUp,
   Layers,
@@ -27,7 +26,6 @@ import { apiClient } from '../../api/client';
 import { hostMediaIfNeeded } from '../../api/upload';
 import { ServiceCategory, ServiceSubCategory, ServicePackage } from '../../types';
 import { Modal } from '../../components/common/Modal';
-import { AssignServicesToPartnersModal } from '../../components/services/AssignServicesToPartnersModal';
 import { PackageFormModal } from './PackageFormModal';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -534,14 +532,10 @@ interface PackageSectionGroup {
 const SubCategoryTile: React.FC<{
   subCat: ServiceSubCategory;
   categoryServices: any[];
-  vendors: any[];
-  allServices: any[];
   onEdit: (subCat: ServiceSubCategory) => void;
-}> = ({ subCat, categoryServices, vendors, allServices, onEdit }) => {
+}> = ({ subCat, categoryServices, onEdit }) => {
   const queryClient = useQueryClient();
   const [packagesOpen, setPackagesOpen] = useState(false);
-  const [assignOpen, setAssignOpen] = useState(false);
-  const [assignServiceId, setAssignServiceId] = useState('');
 
   // Package Form Modal State
   const [isPackageModalOpen, setIsPackageModalOpen] = useState(false);
@@ -684,18 +678,6 @@ const SubCategoryTile: React.FC<{
           >
             <Package className="w-3.5 h-3.5" />
             Create Package
-          </button>
-
-          {/* Assign */}
-          <button
-            onClick={() => {
-              setAssignServiceId(subCatServices[0]?.id || '');
-              setAssignOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg text-xs font-semibold transition"
-          >
-            <UserCheck className="w-3.5 h-3.5" />
-            Assign
           </button>
 
           {/* Edit Sub-Category with pencil icon */}
@@ -913,21 +895,6 @@ const SubCategoryTile: React.FC<{
         }}
       />
 
-      {/* Assign Modal — multi service × multi partner */}
-      <AssignServicesToPartnersModal
-        isOpen={assignOpen}
-        onClose={() => setAssignOpen(false)}
-        services={allServices}
-        partners={vendors}
-        preselectedServiceIds={assignServiceId ? [assignServiceId] : []}
-        onAssigned={() => {
-          queryClient.invalidateQueries({ queryKey: ['category-services'] });
-          queryClient.invalidateQueries({ queryKey: ['all-catalog-services-list'] });
-          queryClient.invalidateQueries({ queryKey: ['vendors'] });
-          queryClient.invalidateQueries({ queryKey: ['vendors-list-selector'] });
-          queryClient.invalidateQueries({ queryKey: ['vendor-detail'] });
-        }}
-      />
     </div>
   );
 };
@@ -972,24 +939,6 @@ export const CategoryDetailPage: React.FC = () => {
       return res.data?.data || [];
     },
     enabled: !!activeId,
-  });
-
-  // Fetch all services for assign modal
-  const { data: allServices = [] } = useQuery({
-    queryKey: ['all-catalog-services-list'],
-    queryFn: async () => {
-      const res = await apiClient.get('/admin/services?limit=100');
-      return res.data?.data || [];
-    },
-  });
-
-  // Fetch vendors for assign modal
-  const { data: vendors = [] } = useQuery({
-    queryKey: ['vendors-list-selector'],
-    queryFn: async () => {
-      const res = await apiClient.get('/admin/vendors?limit=100');
-      return res.data?.data || [];
-    },
   });
 
   const isLoading = catLoading || subCatLoading;
@@ -1091,8 +1040,6 @@ export const CategoryDetailPage: React.FC = () => {
                 key={subCat.id}
                 subCat={subCat}
                 categoryServices={categoryServices}
-                vendors={vendors}
-                allServices={allServices}
                 onEdit={(sc) => setEditingSubCat(sc)}
               />
             ))}

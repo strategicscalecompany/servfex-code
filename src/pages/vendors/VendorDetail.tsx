@@ -8,7 +8,6 @@ import { StatusBadge } from '../../components/common/StatusBadge';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
 import { Modal } from '../../components/common/Modal';
 import { VendorLocationMap } from '../../components/vendors/VendorLocationMap';
-import { AssignServicesToPartnersModal } from '../../components/services/AssignServicesToPartnersModal';
 import {
   ArrowLeft,
   Briefcase,
@@ -38,7 +37,6 @@ import {
   Warehouse,
   Eye,
   ChevronDown,
-  UserCheck,
   Radar,
 } from 'lucide-react';
 
@@ -60,7 +58,6 @@ export const VendorDetail: React.FC = () => {
   const [isRejectOpen, setIsRejectOpen] = useState(false);
   const [isSuspendOpen, setIsSuspendOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-  const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
   const [previewDoc, setPreviewDoc] = useState<{ title: string; fileUrl: string; type?: string } | null>(null);
   const [radiusKmInput, setRadiusKmInput] = useState('');
@@ -80,14 +77,6 @@ export const VendorDetail: React.FC = () => {
       return res.data?.data;
     },
     enabled: !!id,
-  });
-
-  const { data: catalogServices = [] } = useQuery({
-    queryKey: ['all-catalog-services-list'],
-    queryFn: async () => {
-      const res = await apiClient.get('/admin/services?limit=100');
-      return res.data?.data || [];
-    },
   });
 
   // Fetch Vendor Bookings History
@@ -203,29 +192,6 @@ export const VendorDetail: React.FC = () => {
   });
 
 
-
-  // Remove Service Mutation
-  const removeServiceMutation = useMutation({
-    mutationFn: async (serviceId: string) => {
-      return apiClient.delete(`/admin/vendors/${id}/services/${serviceId}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['vendor-detail', id] });
-    },
-  });
-
-  // Toggle Service Active Status Mutation
-  const toggleServiceStatusMutation = useMutation({
-    mutationFn: async ({ serviceId, isActive }: { serviceId: string; isActive: boolean }) => {
-      return apiClient.post(`/admin/vendors/${id}/services`, {
-        serviceId,
-        isActive,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['vendor-detail', id] });
-    },
-  });
 
   React.useEffect(() => {
     if (vendor?.serviceRadiusKm != null && Number.isFinite(Number(vendor.serviceRadiusKm))) {
@@ -793,7 +759,7 @@ export const VendorDetail: React.FC = () => {
                 <p className="text-xs text-emerald-600 font-medium">Hub UPI updated.</p>
               )}
               <p className="text-[11px] text-slate-500">
-                Used for all job payment QR codes. Only Super Admin or HOM can edit this — not Partners or professionals.
+                Used for all job payment QR codes. Only Super Admin or BOM can edit this — not Partners or professionals.
                 Current:{' '}
                 <span className="font-semibold text-slate-700">{vendor.upiId || 'not set'}</span>
               </p>
@@ -1127,17 +1093,9 @@ export const VendorDetail: React.FC = () => {
                 Services Offered ({services.length})
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Catalog services assigned to and fulfilled by this service partner.
+                Read-only view. Hub catalog is assigned only by this hub&apos;s Business Operation Manager (Assign tab in the vendor app).
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsAssignOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition shadow-xs"
-            >
-              <UserCheck className="w-3.5 h-3.5" />
-              Assign Services
-            </button>
           </div>
 
           {services.length === 0 ? (
@@ -1146,7 +1104,7 @@ export const VendorDetail: React.FC = () => {
               <div>
                 <p className="text-sm font-semibold text-slate-600">No services assigned yet</p>
                 <p className="text-xs text-slate-400 mt-0.5 max-w-sm mx-auto">
-                  Use Assign Services above to add catalog services for this partner.
+                  The assigned Business Operation Manager enables packages for this hub from the Assign tab.
                 </p>
               </div>
             </div>
@@ -1160,7 +1118,6 @@ export const VendorDetail: React.FC = () => {
                     <th className="py-3 px-4">Base Starting Price</th>
                     <th className="py-3 px-4">Custom Partner Price</th>
                     <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1180,19 +1137,15 @@ export const VendorDetail: React.FC = () => {
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex flex-col items-start gap-1">
-                          <button
-                            type="button"
-                            onClick={() => toggleServiceStatusMutation.mutate({ serviceId: vs.serviceId, isActive: !vs.isActive })}
-                            disabled={toggleServiceStatusMutation.isPending}
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold transition ${
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                               vs.isActive
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
-                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-slate-100 text-slate-600'
                             }`}
-                            title="Click to toggle partner assignment status"
                           >
-                            {vs.isActive ? 'Assigned Active' : 'Assigned Off'}
-                          </button>
+                            {vs.isActive ? 'BOM Assigned' : 'Paused'}
+                          </span>
                           {vs.service && vs.service.isActive === false && (
                             <span
                               className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200"
@@ -1202,21 +1155,6 @@ export const VendorDetail: React.FC = () => {
                             </span>
                           )}
                         </div>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (confirm(`Unassign "${vs.service?.name || 'this service'}" from this partner?`)) {
-                              removeServiceMutation.mutate(vs.serviceId);
-                            }
-                          }}
-                          disabled={removeServiceMutation.isPending}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
-                          title="Remove service from partner"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
                       </td>
                     </tr>
                   ))}
@@ -1550,40 +1488,6 @@ export const VendorDetail: React.FC = () => {
         </Modal>
       )}
 
-      {vendor && (
-        <AssignServicesToPartnersModal
-          isOpen={isAssignOpen}
-          onClose={() => setIsAssignOpen(false)}
-          services={catalogServices}
-          partners={[
-            {
-              id: vendor.id,
-              companyName: vendor.companyName,
-              location: vendor.location,
-            },
-          ]}
-          preselectedPartnerIds={[vendor.id]}
-          preselectedServiceIds={services
-            .map((vs: any) => String(vs.serviceId || vs.service?.id || ''))
-            .filter(Boolean)}
-          prefilledPrices={Object.fromEntries(
-            services
-              .map((vs: any) => {
-                const sid = String(vs.serviceId || vs.service?.id || '');
-                if (!sid) return null;
-                const price = vs.customPrice ?? vs.service?.startingPrice;
-                if (price == null || price === '') return null;
-                return [sid, String(Number(price))];
-              })
-              .filter(Boolean) as Array<[string, string]>
-          )}
-          onAssigned={() => {
-            queryClient.invalidateQueries({ queryKey: ['vendor-detail', id] });
-            queryClient.invalidateQueries({ queryKey: ['vendors'] });
-            queryClient.invalidateQueries({ queryKey: ['vendors-list-selector'] });
-          }}
-        />
-      )}
     </div>
   );
 };
