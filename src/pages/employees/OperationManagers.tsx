@@ -18,6 +18,7 @@ import {
   Upload,
   X,
   Image as ImageIcon,
+  Trash2,
 } from 'lucide-react';
 import { Modal } from '../../components/common/Modal';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -258,6 +259,38 @@ export const OperationManagers: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['admin-managers'] });
     },
   });
+
+  const deleteManagerMutation = useMutation({
+    mutationFn: async (managerId: string) => {
+      await apiClient.delete(`/admin/managers/${managerId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-managers'] });
+    },
+  });
+
+  const handleDeleteManager = (mgr: OperationManager) => {
+    const confirmed = window.confirm(
+      `Delete Business Operation Manager "${mgr.name}"?\n\nThis permanently removes their account and login. Hub assignments will be cleared. This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    deleteManagerMutation.mutate(mgr.id, {
+      onSuccess: () => {
+        if (selectedManager?.id === mgr.id) {
+          setSelectedManager(null);
+          setIsManageHubsOpen(false);
+        }
+      },
+      onError: (err: any) => {
+        alert(
+          err?.response?.data?.error?.message ||
+            err?.message ||
+            'Failed to delete Business Operation Manager'
+        );
+      },
+    });
+  };
 
   const handleAddManager = (e: React.FormEvent) => {
     e.preventDefault();
@@ -654,6 +687,15 @@ export const OperationManagers: React.FC = () => {
                           <Layers className="w-3.5 h-3.5" />
                           <span>Hubs</span>
                         </button>
+                        <button
+                          onClick={() => handleDeleteManager(mgr)}
+                          disabled={deleteManagerMutation.isPending}
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 transition inline-flex items-center gap-1 disabled:opacity-50"
+                          title="Delete Business Operation Manager"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Delete</span>
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -810,7 +852,15 @@ export const OperationManagers: React.FC = () => {
               </ul>
             </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+            <div className="flex justify-between gap-2 pt-3 border-t border-slate-100">
+              <button
+                onClick={() => handleDeleteManager(selectedManager)}
+                disabled={deleteManagerMutation.isPending}
+                className="px-4 py-2 text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl inline-flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{deleteManagerMutation.isPending ? 'Deleting…' : 'Delete BOM'}</span>
+              </button>
               <button
                 onClick={() => setSelectedManager(null)}
                 className="px-4 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl"
