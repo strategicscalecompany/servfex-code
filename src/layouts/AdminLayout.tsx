@@ -25,7 +25,6 @@ import {
   Activity,
   Home,
   Sparkles,
-  Tags,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useBookingRealtime } from '../hooks/useBookingRealtime';
@@ -45,8 +44,8 @@ export const AdminLayout: React.FC = () => {
   const isOurAppPath = location.pathname.startsWith('/our-app');
   const [isOurAppOpen, setIsOurAppOpen] = useState(true);
 
-  // Full-bleed edge-to-edge layout for Warehouse Map
-  const isWarehousePath = location.pathname.startsWith('/warehouse');
+  // Full-bleed edge-to-edge layout for Hub Map
+  const isWarehousePath = location.pathname.startsWith('/hub');
   const isCategoryDetailPage =
     (location.pathname.startsWith('/our-app/services/') && location.pathname !== '/our-app/services') ||
     (location.pathname.startsWith('/services/') && location.pathname !== '/services');
@@ -70,19 +69,18 @@ export const AdminLayout: React.FC = () => {
   ];
 
   const employeeSubLinks = [
-    { name: 'Hub Operation Managers', path: '/employees/operation-managers', icon: Compass },
+    { name: 'Business Operation Managers', path: '/employees/operation-managers', icon: Compass },
     { name: 'Development Managers', path: '/employees/development-managers', icon: Code2 },
   ];
 
   const ourAppSubLinks = [
     { name: 'Home', path: '/our-app/home', icon: Home },
     { name: 'Services', path: '/our-app/services', icon: Sparkles },
-    { name: 'Specialist Tags', path: '/our-app/tags', icon: Tags },
   ];
 
   const secondaryNavLinks = [
     { name: 'Support Inbox', path: '/support-inbox', icon: Inbox, badge: '5' },
-    { name: 'Warehouse', path: '/warehouse', icon: Boxes },
+    { name: 'Hub', path: '/hub', icon: Boxes },
   ];
 
   // Cleaned platform navigation: removed "Services & Catalog" and "Platform Settings"
@@ -281,7 +279,7 @@ export const AdminLayout: React.FC = () => {
                 )}
               </div>
 
-              {/* Secondary requested pages: Support Inbox, Warehouse */}
+              {/* Secondary requested pages: Support Inbox, Hub */}
               {secondaryNavLinks.map((link) => (
                 <NavItem key={link.path} item={link} badge={link.badge} />
               ))}

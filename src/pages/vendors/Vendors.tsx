@@ -1394,7 +1394,7 @@ export const Vendors: React.FC = () => {
                   className="w-full p-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-indigo-500 bg-white"
                 />
                 <p className="mt-1 text-[11px] text-slate-400">
-                  Only Super Admin or Hub Operations Manager can set this. Partners and professionals cannot edit it.
+                  Only Super Admin or Business Operation Manager can set this. Partners and professionals cannot edit it.
                 </p>
               </div>
 

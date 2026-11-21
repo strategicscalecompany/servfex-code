@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../api/client';
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useRef, useState, useEffect } from 'react';
 import {
   Home,
   Wrench,
@@ -39,8 +39,12 @@ import {
   RotateCw,
   Layers,
   ArrowRight,
+  Upload,
+  X,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { Modal } from '../../components/common/Modal';
+import { hostMediaIfNeeded } from '../../api/upload';
 
 
 interface HomePreviewCategory {
@@ -68,7 +72,17 @@ interface PromoSlideItem {
   accentColor: string;
   bgColor: string;
   isActive: boolean;
+  /** Full-bleed banner image. When set, customer app shows image only (no CTA/booking overlay). */
+  imageUrl?: string | null;
 }
+
+const toBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+  });
 
 // ─── Section Configuration ───────────────────────────────────────────────────
 interface SectionConfig {
@@ -143,7 +157,19 @@ export const AppHome: React.FC = () => {
 
   const publishMutation = useMutation({
     mutationFn: async (payload: any) => {
-      const res = await apiClient.put('/admin/home-layout', payload);
+      const rawSlides: PromoSlideItem[] = Array.isArray(payload.slides) ? payload.slides : [];
+      const slides = await Promise.all(
+        rawSlides.map(async (slide) => ({
+          ...slide,
+          tag: slide.tag || '',
+          headline: slide.headline || '',
+          subtext: slide.subtext || '',
+          accentColor: slide.accentColor || '#FFD166',
+          bgColor: slide.bgColor || '#1A1A2E',
+          imageUrl: (await hostMediaIfNeeded(slide.imageUrl, 'servfex/home/banners')) || null,
+        }))
+      );
+      const res = await apiClient.put('/admin/home-layout', { ...payload, slides });
       return res.data;
     },
     onSuccess: () => {
@@ -391,38 +417,47 @@ export const AppHome: React.FC = () => {
     );
   };
 
-  // ── Modal for Adding New Promo Slide ──
+  // ── Modal for Adding New Promo Slide (image-only) ──
   const [isAddSlideOpen, setIsAddSlideOpen] = useState(false);
-  const [newSlide, setNewSlide] = useState({
-    tag: '',
-    headline: '',
-    subtext: 'Book Now →',
-    accentColor: '#FFD166',
-    bgColor: '#1A1A2E',
-  });
+  const [newSlideImage, setNewSlideImage] = useState<string | null>(null);
+  const [slideImageError, setSlideImageError] = useState<string | null>(null);
+  const slideFileInputRef = useRef<HTMLInputElement>(null);
 
   const [publishSuccess, setPublishSuccess] = useState(false);
 
+  const handleSlideImageFile = useCallback(async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setSlideImageError('Choose a PNG, JPG, or WebP image.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setSlideImageError('Image must be under 5 MB.');
+      return;
+    }
+    setSlideImageError(null);
+    setNewSlideImage(await toBase64(file));
+  }, []);
+
   const handleAddSlide = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newSlideImage) {
+      setSlideImageError('Add a banner image to continue.');
+      return;
+    }
     const created: PromoSlideItem = {
       id: `SLIDE-${Date.now()}`,
-      tag: newSlide.tag,
-      headline: newSlide.headline,
-      subtext: newSlide.subtext,
-      accentColor: newSlide.accentColor,
-      bgColor: newSlide.bgColor,
+      tag: '',
+      headline: '',
+      subtext: '',
+      accentColor: '#FFD166',
+      bgColor: '#1A1A2E',
+      imageUrl: newSlideImage,
       isActive: true,
     };
     setSlides([...slides, created]);
     setIsAddSlideOpen(false);
-    setNewSlide({
-      tag: '',
-      headline: '',
-      subtext: 'Book Now →',
-      accentColor: '#FFD166',
-      bgColor: '#1A1A2E',
-    });
+    setNewSlideImage(null);
+    setSlideImageError(null);
   };
 
   const deleteSlide = (id: string) => {
@@ -591,10 +626,16 @@ export const AppHome: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-extrabold text-slate-900 text-sm">Promo Banner Carousel ({slides.length} Slides)</h3>
-                <p className="text-xs text-slate-500">Directly mapped to <code className="font-mono text-slate-700">promoSlides</code> in HomeScreen.kt.</p>
+                <p className="text-xs text-slate-500">
+                  Image-only banners for the customer home carousel (no links or booking CTAs).
+                </p>
               </div>
               <button
-                onClick={() => setIsAddSlideOpen(true)}
+                onClick={() => {
+                  setNewSlideImage(null);
+                  setSlideImageError(null);
+                  setIsAddSlideOpen(true);
+                }}
                 className="px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition inline-flex items-center gap-1.5"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -611,30 +652,29 @@ export const AppHome: React.FC = () => {
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div
-                      className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs text-white shrink-0 shadow-xs"
-                      style={{ backgroundColor: slide.bgColor }}
-                    >
-                      <span style={{ color: slide.accentColor }}>{idx + 1}</span>
-                    </div>
+                    {slide.imageUrl ? (
+                      <img
+                        src={slide.imageUrl}
+                        alt={`Slide ${idx + 1}`}
+                        className="w-16 h-10 rounded-lg object-cover shrink-0 border border-slate-200 bg-slate-100"
+                      />
+                    ) : (
+                      <div
+                        className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs text-white shrink-0 shadow-xs"
+                        style={{ backgroundColor: slide.bgColor }}
+                      >
+                        <span style={{ color: slide.accentColor }}>{idx + 1}</span>
+                      </div>
+                    )}
 
                     <div className="min-w-0 space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase"
-                          style={{
-                            backgroundColor: `${slide.accentColor}25`,
-                            color: slide.accentColor,
-                          }}
-                        >
-                          {slide.tag}
-                        </span>
-                        <span className="text-xs font-bold text-slate-900 truncate">
-                          {slide.headline.replace('\n', ' ')}
-                        </span>
-                      </div>
+                      <span className="text-xs font-bold text-slate-900 truncate block">
+                        {slide.imageUrl
+                          ? `Banner image · Slide ${idx + 1}`
+                          : slide.headline?.replace('\n', ' ') || `Slide ${idx + 1}`}
+                      </span>
                       <span className="text-[11px] text-slate-500 block truncate">
-                        Action: <strong className="text-slate-700">{slide.subtext}</strong>
+                        {slide.imageUrl ? 'Image banner (no booking link)' : 'Legacy text slide'}
                       </span>
                     </div>
                   </div>
@@ -1089,61 +1129,41 @@ export const AppHome: React.FC = () => {
                   {/* 4. AUTO-SCROLLING PROMO BANNER PAGER (HomeScreen.kt PromoBannerPager) */}
                   {isSectionEnabled('SEC-PROMO-PAGER') && currentSlide && (
                     <div className="space-y-2 pt-1">
-                      {/* 140dp Promo Slide Card */}
+                      {/* 140dp Promo Slide Card — image-first */}
                       <div
-                        className="h-[140px] rounded-2xl p-4 text-white relative overflow-hidden flex items-center justify-between shadow-md cursor-pointer"
+                        className="h-[140px] rounded-2xl relative overflow-hidden shadow-md"
                         style={{ backgroundColor: currentSlide.bgColor }}
                       >
-                        {/* Decorative Circles from Jetpack Compose Canvas */}
-                        <div
-                          className="absolute -right-6 -top-6 w-36 h-36 rounded-full pointer-events-none"
-                          style={{
-                            backgroundColor: `${currentSlide.accentColor}1F`, // ~12% alpha
-                          }}
-                        />
-                        <div
-                          className="absolute right-6 top-3 w-24 h-24 rounded-full pointer-events-none"
-                          style={{
-                            backgroundColor: `${currentSlide.accentColor}14`, // ~8% alpha
-                          }}
-                        />
-
-                        {/* Silhouette Gradient Overlay on Right */}
-                        <div
-                          className="absolute right-0 top-0 bottom-0 w-[110px] pointer-events-none"
-                          style={{
-                            background: `linear-gradient(to right, ${currentSlide.bgColor}, ${currentSlide.accentColor}2E)`,
-                          }}
-                        />
-
-                        {/* Text content on left (62% width) */}
-                        <div className="relative z-10 max-w-[62%] space-y-1.5">
-                          {/* Tag pill */}
-                          <span
-                            className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold tracking-wider uppercase"
-                            style={{
-                              backgroundColor: `${currentSlide.accentColor}33`,
-                              color: currentSlide.accentColor,
-                            }}
-                          >
-                            {currentSlide.tag}
-                          </span>
-
-                          {/* Headline: 17sp bold, line-height 23sp */}
-                          <h4 className="text-[17px] font-bold text-white leading-[23px] whitespace-pre-line">
-                            {currentSlide.headline}
-                          </h4>
-
-                          {/* Subtext with Arrow */}
-                          <div className="flex items-center gap-1 pt-0.5">
-                            <span
-                              className="text-[12px] font-semibold"
-                              style={{ color: currentSlide.accentColor }}
-                            >
-                              {currentSlide.subtext}
-                            </span>
-                          </div>
-                        </div>
+                        {currentSlide.imageUrl ? (
+                          <img
+                            src={currentSlide.imageUrl}
+                            alt="Promotional banner"
+                            className="absolute inset-0 w-full h-full object-cover"
+                          />
+                        ) : (
+                          <>
+                            <div
+                              className="absolute -right-6 -top-6 w-36 h-36 rounded-full pointer-events-none"
+                              style={{ backgroundColor: `${currentSlide.accentColor}1F` }}
+                            />
+                            <div className="relative z-10 max-w-[62%] space-y-1.5 p-4 text-white">
+                              {currentSlide.tag ? (
+                                <span
+                                  className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold tracking-wider uppercase"
+                                  style={{
+                                    backgroundColor: `${currentSlide.accentColor}33`,
+                                    color: currentSlide.accentColor,
+                                  }}
+                                >
+                                  {currentSlide.tag}
+                                </span>
+                              ) : null}
+                              <h4 className="text-[17px] font-bold text-white leading-[23px] whitespace-pre-line">
+                                {currentSlide.headline || 'Promo banner'}
+                              </h4>
+                            </div>
+                          </>
+                        )}
                       </div>
 
                       {/* Dot Indicators */}
@@ -1427,80 +1447,95 @@ export const AppHome: React.FC = () => {
         </div>
       </div>
 
-      {/* Add Promo Slide Modal */}
-      <Modal isOpen={isAddSlideOpen} onClose={() => setIsAddSlideOpen(false)} title="Create Promotional Banner Slide" maxWidth="md">
+      {/* Add Promo Slide Modal — image only */}
+      <Modal
+        isOpen={isAddSlideOpen}
+        onClose={() => {
+          setIsAddSlideOpen(false);
+          setNewSlideImage(null);
+          setSlideImageError(null);
+        }}
+        title="Create Promotional Banner Slide"
+        maxWidth="md"
+      >
         <form onSubmit={handleAddSlide} className="space-y-4">
+          <p className="text-xs text-slate-500">
+            Upload a banner image only. No booking links or call-to-action text — the slide shows the image as-is on the customer home screen.
+          </p>
+
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
-              Tag Pill Label
+              Banner Image
             </label>
+            <div
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const file = e.dataTransfer.files?.[0];
+                if (file) void handleSlideImageFile(file);
+              }}
+              onClick={() => slideFileInputRef.current?.click()}
+              className="relative cursor-pointer border-2 border-dashed border-slate-300 rounded-xl hover:border-slate-900 transition-colors bg-slate-50 hover:bg-slate-100/80 min-h-[160px] flex items-center justify-center overflow-hidden"
+            >
+              {newSlideImage ? (
+                <>
+                  <img src={newSlideImage} alt="Banner preview" className="w-full h-40 object-cover" />
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setNewSlideImage(null);
+                    }}
+                    className="absolute top-2 right-2 p-1 bg-white rounded-full shadow hover:bg-rose-50 text-slate-500 hover:text-rose-500"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              ) : (
+                <div className="text-center px-4 py-8">
+                  <Upload className="w-6 h-6 mx-auto mb-2 text-slate-400" />
+                  <p className="text-sm font-semibold text-slate-700">Drop banner image here</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    or <span className="text-indigo-600 font-medium">browse</span> · PNG / JPG / WebP · max 5 MB
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-2 inline-flex items-center gap-1">
+                    <ImageIcon className="w-3 h-3" /> Recommended ~1200×420 for the home carousel
+                  </p>
+                </div>
+              )}
+            </div>
             <input
-              type="text"
-              required
-              value={newSlide.tag}
-              onChange={(e) => setNewSlide({ ...newSlide, tag: e.target.value })}
-              placeholder="e.g. Festival Special or Limited Offer"
-              className="w-full p-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-900"
+              ref={slideFileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void handleSlideImageFile(file);
+                e.target.value = '';
+              }}
             />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
-              Headline (Supports multi-line with \n)
-            </label>
-            <textarea
-              required
-              rows={2}
-              value={newSlide.headline}
-              onChange={(e) => setNewSlide({ ...newSlide, headline: e.target.value })}
-              placeholder={'e.g. 30% off on\ndeep sanitization'}
-              className="w-full p-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-900"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
-                Subtext Call to Action
-              </label>
-              <input
-                type="text"
-                required
-                value={newSlide.subtext}
-                onChange={(e) => setNewSlide({ ...newSlide, subtext: e.target.value })}
-                placeholder="e.g. Book Now →"
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-900"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
-                Accent Color
-              </label>
-              <select
-                value={newSlide.accentColor}
-                onChange={(e) => setNewSlide({ ...newSlide, accentColor: e.target.value })}
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-900 bg-white"
-              >
-                <option value="#FFD166">Gold (#FFD166)</option>
-                <option value="#06D6A0">Emerald (#06D6A0)</option>
-                <option value="#90E0EF">Sky Blue (#90E0EF)</option>
-                <option value="#FF6B6B">Coral (#FF6B6B)</option>
-              </select>
-            </div>
+            {slideImageError ? (
+              <p className="text-xs text-rose-600 mt-1.5 font-medium">{slideImageError}</p>
+            ) : null}
           </div>
 
           <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
             <button
               type="button"
-              onClick={() => setIsAddSlideOpen(false)}
+              onClick={() => {
+                setIsAddSlideOpen(false);
+                setNewSlideImage(null);
+                setSlideImageError(null);
+              }}
               className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-sm transition"
+              disabled={!newSlideImage}
+              className="px-4 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-sm transition disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Add to Carousel
             </button>

@@ -150,7 +150,7 @@ const WarehouseMiniMap: React.FC<{
           const marker = new googleMaps.Marker({
             position,
             map,
-            title: title || 'Warehouse Fulfillment Hub',
+            title: title || 'Fulfillment Hub',
             animation: googleMaps.Animation.DROP,
           });
 
@@ -160,7 +160,7 @@ const WarehouseMiniMap: React.FC<{
           mapInstanceRef.current.setCenter(position);
           if (markerRef.current) {
             markerRef.current.setPosition(position);
-            markerRef.current.setTitle(title || 'Warehouse Fulfillment Hub');
+            markerRef.current.setTitle(title || 'Fulfillment Hub');
           }
         }
 
@@ -236,7 +236,7 @@ export const Warehouse: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
 
-  // Modal State for adding a new warehouse depot / partner
+  // Modal State for adding a new hub depot / partner
   const [isAddWarehouseOpen, setIsAddWarehouseOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [googleMapsUrl, setGoogleMapsUrl] = useState('');
@@ -377,7 +377,7 @@ export const Warehouse: React.FC = () => {
   const totalTodayJobs = vendorsList.reduce((acc, v) => acc + v.todayJobsCount, 0);
 
   /**
-   * Auto-fit bounds on the Google Map to zoom out and pinpoint ALL warehouses cleanly.
+   * Auto-fit bounds on the Google Map to zoom out and pinpoint ALL hubs cleanly.
    */
   const fitAllMarkers = useCallback(
     (vendors: VendorMapProfile[] = filteredVendors) => {
@@ -457,7 +457,7 @@ export const Warehouse: React.FC = () => {
     Object.values(infoWindowsRef.current).forEach((w) => w.close());
     infoWindowsRef.current = {};
 
-    // Add new markers for every warehouse depot
+    // Add new markers for every hub depot
     filteredVendors.forEach((vendor) => {
       const isSelected = selectedVendor?.id === vendor.id;
 
@@ -515,7 +515,7 @@ export const Warehouse: React.FC = () => {
       infoWindowsRef.current[vendor.id] = infoWindow;
     });
 
-    // Automatically zoom out and frame ALL warehouses on first load or when vendor count changes
+    // Automatically zoom out and frame ALL hubs on first load or when vendor count changes
     if (
       filteredVendors.length > 0 &&
       (!hasAutoFittedRef.current || previousVendorsCountRef.current !== filteredVendors.length)
@@ -591,11 +591,11 @@ export const Warehouse: React.FC = () => {
       const hostedUrl = await hostMediaIfNeeded(optimized, 'servfex/warehouses');
       setModalForm((prev) => ({ ...prev, warehouseImage: hostedUrl || '' }));
     } catch (err: any) {
-      alert(err.response?.data?.error?.message || err.message || 'Failed to upload warehouse facility photo');
+      alert(err.response?.data?.error?.message || err.message || 'Failed to upload hub facility photo');
     }
   };
 
-  // Create Partner & Warehouse Depot Mutation
+  // Create Partner & Hub Depot Mutation
   const createWarehouseMutation = useMutation({
     mutationFn: async (payload: any) => {
       return apiClient.post('/admin/vendors', payload);
@@ -626,7 +626,7 @@ export const Warehouse: React.FC = () => {
 
       const created = res.data?.data;
       if (created) {
-        // Automatically zoom out and select the newly added warehouse
+        // Automatically zoom out and select the newly added hub
         setTimeout(() => {
           fitAllMarkers();
         }, 500);
@@ -648,14 +648,14 @@ export const Warehouse: React.FC = () => {
             </div>
             <h3 className="font-extrabold text-slate-900 text-sm">No Active Partner Depots Found</h3>
             <p className="text-xs text-slate-500">
-              There are currently no partner fulfillment warehouses registered or matching your filter. Click below to add a partner warehouse location directly.
+              There are currently no partner fulfillment hubs registered or matching your filter. Click below to add a partner hub location directly.
             </p>
             <button
               onClick={() => setIsAddWarehouseOpen(true)}
               className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition inline-flex items-center gap-1.5 shadow-sm"
             >
               <Plus className="w-4 h-4" />
-              <span>Add First Warehouse Depot</span>
+              <span>Add First Hub Depot</span>
             </button>
           </div>
         )}
@@ -669,7 +669,7 @@ export const Warehouse: React.FC = () => {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search warehouse depot, partner name, area..."
+                placeholder="Search hub depot, partner name, area..."
                 className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs outline-none focus:border-indigo-500"
               />
             </div>
@@ -701,7 +701,7 @@ export const Warehouse: React.FC = () => {
         </div>
       </div>
 
-      {/* Slide-Over Side Panel: Selected Warehouse Details (Slides in on the Right Side) */}
+      {/* Slide-Over Side Panel: Selected Hub Details (Slides in on the Right Side) */}
       <aside
         className={`absolute top-0 right-0 h-full w-full sm:w-[460px] lg:w-[480px] bg-white border-l border-slate-200/90 shadow-2xl z-[1500] flex flex-col transition-transform duration-300 ease-in-out ${
           selectedVendor ? 'translate-x-0' : 'translate-x-full pointer-events-none'
@@ -754,7 +754,7 @@ export const Warehouse: React.FC = () => {
 
           {/* Scrollable Content */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs text-slate-800">
-            {/* Warehouse Facility Photo if available */}
+            {/* Hub Facility Photo if available */}
             {selectedVendor.warehouseImageUrl && (
               <div className="relative w-full h-36 rounded-2xl overflow-hidden border border-slate-200 shadow-2xs group">
                 <img
@@ -967,10 +967,10 @@ export const Warehouse: React.FC = () => {
               </div>
             </div>
 
-            {/* Warehouse Depot Allocation */}
+            {/* Hub Depot Allocation */}
             <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/80 space-y-1.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                Assigned Warehouse & Spare Parts Depot
+                Assigned Hub & Spare Parts Depot
               </span>
               <div className="flex items-center gap-2 text-slate-800 font-bold text-xs">
                 <Boxes className="w-4 h-4 text-indigo-600" />
@@ -1003,11 +1003,11 @@ export const Warehouse: React.FC = () => {
       )}
     </aside>
 
-      {/* Onboard / Add Warehouse Depot Modal */}
+      {/* Onboard / Add Hub Depot Modal */}
       <Modal
         isOpen={isAddWarehouseOpen}
         onClose={() => setIsAddWarehouseOpen(false)}
-        title="Add & Pin Partner Warehouse Depot"
+        title="Add & Pin Partner Hub Depot"
         maxWidth="2xl"
       >
         <form
@@ -1035,7 +1035,7 @@ export const Warehouse: React.FC = () => {
             <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 font-medium">
               {(createWarehouseMutation.error as any)?.response?.data?.error?.message ||
                 (createWarehouseMutation.error as any)?.response?.data?.message ||
-                'Failed to add warehouse depot. Please verify coordinates and details.'}
+                'Failed to add hub depot. Please verify coordinates and details.'}
             </div>
           )}
 
@@ -1045,7 +1045,7 @@ export const Warehouse: React.FC = () => {
               <div className="flex items-center justify-between flex-wrap gap-1">
                 <label className="text-[11px] font-bold uppercase tracking-wider text-indigo-950 flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>Pinpoint Warehouse on Google Maps</span>
+                  <span>Pinpoint Hub on Google Maps</span>
                 </label>
                 {pinpointedCoords && (
                   <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
@@ -1146,24 +1146,24 @@ export const Warehouse: React.FC = () => {
                       })}
                     </div>
                     <p className="text-[11px] text-slate-500">
-                      Enter the coverage in kilometres. A value of 1 draws a 1 km circle around this warehouse pin.
+                      Enter the coverage in kilometres. A value of 1 draws a 1 km circle around this hub pin.
                     </p>
                   </div>
                   <WarehouseMiniMap
                     lat={pinpointedCoords.lat}
                     lng={pinpointedCoords.lng}
-                    title={modalForm.warehouseName || 'Warehouse Depot'}
+                    title={modalForm.warehouseName || 'Hub Depot'}
                     radiusKm={parseCoverageRadiusKm(modalForm.serviceRadiusKm)}
                   />
                 </div>
               )}
             </div>
 
-            {/* 2. Warehouse Details */}
+            {/* 2. Hub Details */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
-                  Warehouse Depot Name *
+                  Hub Depot Name *
                 </label>
                 <input
                   type="text"
@@ -1177,7 +1177,7 @@ export const Warehouse: React.FC = () => {
 
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
-                  Warehouse Hotline Phone *
+                  Hub Hotline Phone *
                 </label>
                 <input
                   type="tel"
@@ -1192,7 +1192,7 @@ export const Warehouse: React.FC = () => {
 
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
-                Warehouse Location / Physical Premises Address *
+                Hub Location / Physical Premises Address *
               </label>
               <input
                 type="text"
@@ -1204,10 +1204,10 @@ export const Warehouse: React.FC = () => {
               />
             </div>
 
-            {/* Warehouse Facility Photo */}
+            {/* Hub Facility Photo */}
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
-                Warehouse Facility Photo (Premises)
+                Hub Facility Photo (Premises)
               </label>
               <div className="flex items-center gap-3">
                 {modalForm.warehouseImage ? (
@@ -1341,7 +1341,7 @@ export const Warehouse: React.FC = () => {
               ) : (
                 <>
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Add & Pin Warehouse</span>
+                  <span>Add & Pin Hub</span>
                 </>
               )}
             </button>

@@ -22,7 +22,6 @@ import { SupportInbox } from './pages/support/SupportInbox';
 import { Warehouse } from './pages/warehouse/Warehouse';
 import { Services } from './pages/services/Services';
 import { CategoryDetailPage } from './pages/services/CategoryDetailPage';
-import { TagsPage } from './pages/tags/Tags';
 import { Categories } from './pages/categories/Categories';
 import { Payments } from './pages/payments/Payments';
 import { Reviews } from './pages/reviews/Reviews';
@@ -104,16 +103,16 @@ export const App: React.FC = () => {
                 <Route path="our-app/home" element={<AppHome />} />
                 <Route path="our-app/services" element={<Services />} />
                 <Route path="our-app/services/:categoryId" element={<CategoryDetailPage />} />
-                <Route path="our-app/tags" element={<TagsPage />} />
                 <Route path="our-app/telemetry" element={<OurApp />} />
                 
                 {/* Legacy route redirects */}
                 <Route path="services" element={<Navigate to="/our-app/services" replace />} />
                 <Route path="services/:categoryId" element={<Navigate to="/our-app/services/:categoryId" replace />} />
 
-                {/* Support & Warehouse */}
+                {/* Support & Hub */}
                 <Route path="support-inbox" element={<SupportInbox />} />
-                <Route path="warehouse" element={<Warehouse />} />
+                <Route path="hub" element={<Warehouse />} />
+                <Route path="warehouse" element={<Navigate to="/hub" replace />} />
 
                 <Route path="categories" element={<Categories />} />
                 <Route path="payments" element={<Payments />} />

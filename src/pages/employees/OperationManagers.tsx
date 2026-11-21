@@ -262,7 +262,7 @@ export const OperationManagers: React.FC = () => {
   const handleAddManager = (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.assignedHubIds.length === 0) {
-      alert('Please assign at least 1 hub to this Hub Operation Manager.');
+      alert('Please assign at least 1 hub to this Business Operation Manager.');
       return;
     }
 
@@ -285,7 +285,7 @@ export const OperationManagers: React.FC = () => {
         alert(
           err?.response?.data?.error?.message ||
             err?.message ||
-            'Failed to appoint Hub Operation Manager'
+            'Failed to appoint Business Operation Manager'
         );
       },
     });
@@ -329,7 +329,7 @@ export const OperationManagers: React.FC = () => {
   const handleSaveAssignedHubs = () => {
     if (!selectedManager) return;
     if (hubSelections.length === 0) {
-      alert('A Hub Operation Manager must be assigned to at least 1 hub.');
+      alert('A Business Operation Manager must be assigned to at least 1 hub.');
       return;
     }
     const selectedNames = livePartnerHubs
@@ -389,7 +389,7 @@ export const OperationManagers: React.FC = () => {
               <Compass className="w-5 h-5 text-amber-400" />
             </div>
             <div>
-              <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Hub Operation Managers</h1>
+              <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Business Operation Managers</h1>
               <p className="text-xs text-slate-500">
                 Super Admin assigns managers to 1 or more hubs to oversee rolling 30-day earnings, deployed technicians, and customer complaints across their territory.
               </p>
@@ -403,7 +403,7 @@ export const OperationManagers: React.FC = () => {
             className="px-4 py-2.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-sm transition inline-flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
-            <span>Add Hub Operation Manager</span>
+            <span>Add Business Operation Manager</span>
           </button>
         </div>
       </div>
@@ -414,9 +414,9 @@ export const OperationManagers: React.FC = () => {
           <div className="flex items-start gap-3">
             <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
             <div>
-              <h4 className="text-sm font-bold text-emerald-950">Hub Operation Manager Appointed Successfully!</h4>
+              <h4 className="text-sm font-bold text-emerald-950">Business Operation Manager Appointed Successfully!</h4>
               <p className="text-xs text-emerald-800 mt-0.5">
-                Login credentials provisioned for the <strong>ServFex Vendor App</strong> (sign in under <strong>Hub Operation Manager (HOM) portal</strong>):
+                Login credentials provisioned for the <strong>ServFex Vendor App</strong> (sign in under <strong>Business Operation Manager (BOM) portal</strong>):
               </p>
               <div className="mt-2.5 flex flex-wrap items-center gap-3 text-xs bg-white px-3.5 py-2 rounded-xl border border-emerald-200 text-slate-800 font-mono shadow-2xs">
                 <span>Email: <strong className="text-slate-900">{appointmentBanner.email}</strong></span>
@@ -539,7 +539,7 @@ export const OperationManagers: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                <th className="py-3.5 px-4">Hub Operation Manager</th>
+                <th className="py-3.5 px-4">Business Operation Manager</th>
                 <th className="py-3.5 px-4">Assigned Partner Hubs (Vendor Locations)</th>
                 <th className="py-3.5 px-4">30-Day Earnings</th>
                 <th className="py-3.5 px-4">Employees / Techs</th>
@@ -552,7 +552,7 @@ export const OperationManagers: React.FC = () => {
               {filteredManagers.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-slate-400 text-xs">
-                    No hub operation managers found matching filters.
+                    No Business Operation Managers found matching filters.
                   </td>
                 </tr>
               ) : (
@@ -669,7 +669,7 @@ export const OperationManagers: React.FC = () => {
         <Modal
           isOpen={!!selectedManager}
           onClose={() => setSelectedManager(null)}
-          title={`Hub Operation Oversight: ${selectedManager.name}`}
+          title={`Business Operation Oversight: ${selectedManager.name}`}
           maxWidth="lg"
         >
           <div className="space-y-5 text-sm">
@@ -833,7 +833,7 @@ export const OperationManagers: React.FC = () => {
           <div className="space-y-4">
             <div>
               <p className="text-xs text-slate-600 font-medium">
-                Select 1 or more live partner vendor hub locations for this Hub Operation Manager to supervise.
+                Select 1 or more live partner vendor hub locations for this Business Operation Manager to supervise.
               </p>
               <p className="text-[11px] text-slate-400 mt-0.5">
                 In ServFex, each service partner vendor facility operates as an active fulfillment hub location.
@@ -909,8 +909,8 @@ export const OperationManagers: React.FC = () => {
         </Modal>
       )}
 
-      {/* Add Hub Operation Manager Modal */}
-      <Modal isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} title="Appoint Hub Operation Manager" maxWidth="lg">
+      {/* Add Business Operation Manager Modal */}
+      <Modal isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} title="Appoint Business Operation Manager" maxWidth="lg">
         <form onSubmit={handleAddManager} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -964,7 +964,7 @@ export const OperationManagers: React.FC = () => {
             </div>
           </div>
           <span className="text-[11px] text-slate-400 block -mt-2">
-            Manager will use this password to sign into the ServFex Vendor App under <strong>Hub Operation Manager (HOM) portal</strong>.
+            Manager will use this password to sign into the ServFex Vendor App under <strong>Business Operation Manager (BOM) portal</strong>.
           </span>
 
           {/* Assign 1 or More Partner Hubs Checkboxes */}

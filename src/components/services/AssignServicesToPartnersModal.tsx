@@ -26,10 +26,13 @@ type Props = {
   preselectedServiceIds?: string[];
   /** Pre-check these partner IDs when the modal opens. */
   preselectedPartnerIds?: string[];
+  /** Optional hub prices for already-assigned services (customPrice preferred). */
+  prefilledPrices?: Record<string, string>;
   onAssigned?: () => void;
 };
 
 const EMPTY_IDS: string[] = [];
+const EMPTY_PRICES: Record<string, string> = {};
 
 const basePriceOf = (service?: AssignableService | null): string => {
   const price = Number(service?.startingPrice);
@@ -43,6 +46,7 @@ export const AssignServicesToPartnersModal: React.FC<Props> = ({
   partners,
   preselectedServiceIds = EMPTY_IDS,
   preselectedPartnerIds = EMPTY_IDS,
+  prefilledPrices = EMPTY_PRICES,
   onAssigned,
 }) => {
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
@@ -55,10 +59,12 @@ export const AssignServicesToPartnersModal: React.FC<Props> = ({
   const servicesRef = useRef(services);
   const preselectedServiceIdsRef = useRef(preselectedServiceIds);
   const preselectedPartnerIdsRef = useRef(preselectedPartnerIds);
+  const prefilledPricesRef = useRef(prefilledPrices);
 
   servicesRef.current = services;
   preselectedServiceIdsRef.current = preselectedServiceIds;
   preselectedPartnerIdsRef.current = preselectedPartnerIds;
+  prefilledPricesRef.current = prefilledPrices;
 
   // Initialize selection only when the modal transitions closed → open.
   // Avoid depending on array props (new references every parent render).
@@ -73,9 +79,12 @@ export const AssignServicesToPartnersModal: React.FC<Props> = ({
     const catalog = servicesRef.current;
     const initialIds = [...new Set((preselectedServiceIdsRef.current || EMPTY_IDS).filter(Boolean))];
     const initialPartnerIds = [...new Set((preselectedPartnerIdsRef.current || EMPTY_IDS).filter(Boolean))];
+    const prefills = prefilledPricesRef.current || EMPTY_PRICES;
     const nextPrices: Record<string, string> = {};
     for (const id of initialIds) {
-      nextPrices[id] = basePriceOf(catalog.find((s) => s.id === id));
+      const prefilled = prefills[id];
+      nextPrices[id] =
+        prefilled && Number(prefilled) > 0 ? String(Number(prefilled)) : basePriceOf(catalog.find((s) => s.id === id));
     }
 
     setSelectedServiceIds(initialIds);

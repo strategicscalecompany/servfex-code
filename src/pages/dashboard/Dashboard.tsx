@@ -41,7 +41,7 @@ interface VendorRevenueRow {
 }
 
 const WAREHOUSE_OPTIONS = [
-  { id: 'ALL', name: 'All Warehouses (Platform Total)', weight: 1.0, city: 'All Regions' },
+  { id: 'ALL', name: 'All Hubs (Platform Total)', weight: 1.0, city: 'All Regions' },
   { id: 'Central Logistics Hub (Hyderabad)', name: 'Central Logistics Hub (Hyderabad)', weight: 0.45, city: 'Hyderabad' },
   { id: 'West Fulfillment Depot (Mumbai)', name: 'West Fulfillment Depot (Mumbai)', weight: 0.25, city: 'Mumbai' },
   { id: 'South Operations Depot (Bengaluru)', name: 'South Operations Depot (Bengaluru)', weight: 0.18, city: 'Bengaluru' },
@@ -88,11 +88,11 @@ export const Dashboard: React.FC = () => {
 
   const stats = data!;
 
-  // Warehouse selection data adjustments
+  // Hub selection data adjustments
   const activeWarehouseObj = WAREHOUSE_OPTIONS.find((w) => w.id === selectedWarehouse) || WAREHOUSE_OPTIONS[0];
   const warehouseWeight = activeWarehouseObj.weight;
 
-  // Base gross revenue calculation taking into account timeframe & selected warehouse
+  // Base gross revenue calculation taking into account timeframe & selected hub
   const rawTotal =
     timeRange === 'TODAY'
       ? stats.revenue.todayRevenue
@@ -125,7 +125,7 @@ export const Dashboard: React.FC = () => {
   const partnerOffset = -adminStroke;
   const employeesOffset = -(adminStroke + partnerStroke);
 
-  // Scaled weekly bar graph data based on warehouse selection and real gross volume
+  // Scaled weekly bar graph data based on hub selection and real gross volume
   const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const weeklyTrendData = daysOfWeek.map((day) => {
     const dayTotal = currentGross > 0 ? Math.round((currentGross / 7) * warehouseWeight) : 0;
@@ -140,7 +140,7 @@ export const Dashboard: React.FC = () => {
 
   const maxDailyTotal = Math.max(...weeklyTrendData.map((d) => d.total), 1);
 
-  // Vendor revenue table items (API merged with calculated income share and warehouse hubs)
+  // Vendor revenue table items (API merged with calculated income share and hub hubs)
   const masterVendorList: VendorRevenueRow[] = (
     vendorsData && Array.isArray(vendorsData) && vendorsData.length > 0
       ? vendorsData.map((v: any, idx: number) => {
@@ -162,7 +162,7 @@ export const Dashboard: React.FC = () => {
       : []
   );
 
-  // Filter vendors by selected warehouse
+  // Filter vendors by selected hub
   const filteredVendorBreakdown = masterVendorList.filter((row) => {
     if (selectedWarehouse === 'ALL') return true;
     return row.warehouseHub === selectedWarehouse;
@@ -170,7 +170,7 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Top Header & Filters (Warehouse Dropdown + Date Range) */}
+      {/* Top Header & Filters (Hub Dropdown + Date Range) */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
@@ -181,9 +181,9 @@ export const Dashboard: React.FC = () => {
           </p>
         </div>
 
-        {/* Filter Controls: Warehouse Dropdown + Date Range Buttons */}
+        {/* Filter Controls: Hub Dropdown + Date Range Buttons */}
         <div className="flex flex-wrap items-center gap-2.5 self-start lg:self-auto">
-          {/* Warehouse Selector Dropdown */}
+          {/* Hub Selector Dropdown */}
           <div className="relative">
             <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200/90 shadow-2xs text-xs font-bold text-slate-800 hover:border-slate-300 transition">
               <Boxes className="w-4 h-4 text-indigo-600 shrink-0" />
@@ -220,7 +220,7 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Warehouse Active Filter Indicator Badge (when specific warehouse is selected) */}
+      {/* Hub Active Filter Indicator Badge (when specific hub is selected) */}
       {selectedWarehouse !== 'ALL' && (
         <div className="bg-indigo-50/70 border border-indigo-200/80 p-3 rounded-2xl flex items-center justify-between text-xs">
           <div className="flex items-center gap-2">
@@ -238,7 +238,7 @@ export const Dashboard: React.FC = () => {
             onClick={() => setSelectedWarehouse('ALL')}
             className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 underline"
           >
-            Reset to All Warehouses
+            Reset to All Hubs
           </button>
         </div>
       )}
@@ -637,7 +637,7 @@ export const Dashboard: React.FC = () => {
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
               {selectedWarehouse === 'ALL'
-                ? 'All participating vendors across all platform warehouse depots.'
+                ? 'All participating vendors across all platform hubs.'
                 : `Attached to ${activeWarehouseObj.name}. Showing Admin commission (18%), Partner payout (54%), and Field Technician wages (28%).`}
             </p>
           </div>
@@ -652,7 +652,7 @@ export const Dashboard: React.FC = () => {
               <tr className="border-b border-slate-100 bg-slate-50/60 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                 <th className="py-3 px-4">Vendor Partner</th>
                 <th className="py-3 px-4">Trade / Category</th>
-                <th className="py-3 px-4">Warehouse Depot</th>
+                <th className="py-3 px-4">Hub Depot</th>
                 <th className="py-3 px-4">Staff Count</th>
                 <th className="py-3 px-4">Jobs Done</th>
                 <th className="py-3 px-4">Gross Revenue</th>
